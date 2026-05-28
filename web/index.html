@@ -4,37 +4,39 @@
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="XMRT Node">
+  <meta name="description" content="XMRT Node — AI-orchestrated Monero mining node">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>XMRT Node</title>
   <link rel="manifest" href="manifest.json">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{background:#030303;color:#f0f0f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
-    #loading{text-align:center;width:300px}
-    .logo{width:56px;height:56px;background:#ff6600;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#000;margin:0 auto 20px;animation:logoPulse 2s ease-in-out infinite}
-    @keyframes logoPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,102,0,0.4)}50%{box-shadow:0 0 0 20px rgba(255,102,0,0)}}
+    #loading{text-align:center}
+    .logo{width:56px;height:56px;background:#ff6600;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#000;margin:0 auto 20px}
+    .logo-pulse{animation:pulse 2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,102,0,0.4)}50%{box-shadow:0 0 0 20px rgba(255,102,0,0)}}
+    .spinner{width:32px;height:32px;margin:20px auto;border:3px solid #1a1a2a;border-top-color:#ff6600;border-radius:50%;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
     h1{font-size:18px;font-weight:700;margin-bottom:4px}
-    p{color:#666;font-size:13px;margin-bottom:24px}
-    .bar-track{height:4px;background:#1a1a2a;border-radius:4px;overflow:hidden;margin-bottom:8px}
-    .bar-fill{height:100%;width:0%;background:linear-gradient(90deg,#ff6600,#D4AF37);border-radius:4px;transition:width 0.3s}
-    .status{font-size:11px;color:#555}
+    p{color:#666;font-size:13px}
   </style>
 </head>
 <body>
   <div id="loading">
-    <div class="logo">X</div>
+    <div class="logo logo-pulse">X</div>
     <h1>XMRT Node</h1>
-    <p>Initializing fleet node...</p>
-    <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
-    <div class="status" id="status">Downloading engine...</div>
+    <p>Loading fleet node...</p>
+    <div class="spinner"></div>
   </div>
   <script src="flutter.js" defer></script>
   <script>
-    var bar=document.getElementById('bar'),st=document.getElementById('status'),i=0;
-    var steps=['Connecting to mesh...','Loading agent kernel...','Initializing mining...','Syncing fleet config...','Almost ready...'];
-    var iv=setInterval(function(){if(i<steps.length){bar.style.width=((i+1)*20)+'%';st.textContent=steps[i];i++}},800);
-    window.addEventListener('load',function(){_flutter.loader.load({onEntrypointLoaded:function(e){clearInterval(iv);bar.style.width='100%';st.textContent='Ready!';setTimeout(function(){var el=document.getElementById('loading');el.style.opacity='0';el.style.transition='opacity 0.3s';setTimeout(function(){el.style.display='none';e.startApp()},300)},300)}})});
+    window.addEventListener('load',function(){
+      _flutter.loader.load({onEntrypointLoaded:function(e){
+        var el=document.getElementById('loading');
+        el.style.opacity='0';el.style.transition='opacity 0.3s';
+        setTimeout(function(){el.style.display='none';e.startApp()},300);
+      }});
+    });
   </script>
 </body>
 </html>
