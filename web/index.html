@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base href="/xmrt-node/">
+  <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="XMRT Node — AI-orchestrated Monero mining node">
+  <meta name="description" content="XMRT Node">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>XMRT Node</title>
   <link rel="manifest" href="manifest.json">
@@ -31,32 +31,10 @@
   </div>
   <script src="flutter.js" defer></script>
   <script>
-    var bar = document.getElementById('bar');
-    var status = document.getElementById('status');
-    var steps = ['Connecting to mesh...','Loading agent kernel...','Initializing mining engine...','Syncing fleet config...','Almost ready...'];
-    var i = 0;
-    var interval = setInterval(function(){
-      if(i < steps.length){
-        bar.style.width = ((i+1) * 20) + '%';
-        status.textContent = steps[i];
-        i++;
-      }
-    }, 800);
-    window.addEventListener('load', function(){
-      _flutter.loader.load({
-        onEntrypointLoaded: function(engine) {
-          clearInterval(interval);
-          bar.style.width = '100%';
-          status.textContent = 'Ready!';
-          setTimeout(function(){
-            document.getElementById('loading').style.opacity = '0';
-            document.getElementById('loading').style.transition = 'opacity 0.3s';
-            setTimeout(function(){ document.getElementById('loading').style.display = 'none'; }, 300);
-            engine.startApp();
-          }, 300);
-        }
-      });
-    });
+    var bar=document.getElementById('bar'),st=document.getElementById('status'),i=0;
+    var steps=['Connecting to mesh...','Loading agent kernel...','Initializing mining...','Syncing fleet config...','Almost ready...'];
+    var iv=setInterval(function(){if(i<steps.length){bar.style.width=((i+1)*20)+'%';st.textContent=steps[i];i++}},800);
+    window.addEventListener('load',function(){_flutter.loader.load({onEntrypointLoaded:function(e){clearInterval(iv);bar.style.width='100%';st.textContent='Ready!';setTimeout(function(){var el=document.getElementById('loading');el.style.opacity='0';el.style.transition='opacity 0.3s';setTimeout(function(){el.style.display='none';e.startApp()},300)},300)}})});
   </script>
 </body>
 </html>
