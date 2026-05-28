@@ -3,6 +3,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/mining_screen.dart';
 import 'screens/agent_chat_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/config.dart';
 import 'services/mining_service.dart';
 import 'services/hermes_agent.dart';
 import 'services/fleet_heartbeat.dart';
@@ -27,22 +28,12 @@ class XMRTNodeApp extends StatelessWidget {
           surface: const Color(0xFF0C0C0C),
         ),
         scaffoldBackgroundColor: const Color(0xFF030303),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0C0C0C),
-          elevation: 0,
-          centerTitle: true,
-        ),
+        appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF0C0C0C), elevation: 0, centerTitle: true),
         cardTheme: CardThemeData(
           color: const Color(0xFF0C0C0C),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: Color(0x29FF6600)),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0x29FF6600))),
         ),
-        navigationBarTheme: NavigationBarThemeData(
-          backgroundColor: const Color(0xFF0C0C0C),
-          indicatorColor: const Color(0x29FF6600),
-        ),
+        navigationBarTheme: NavigationBarThemeData(backgroundColor: const Color(0xFF0C0C0C), indicatorColor: const Color(0x29FF6600)),
       ),
       home: const MainShell(),
     );
@@ -58,17 +49,10 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
-
   final _mining = MiningService();
   final _agent = HermesAgent();
   final _heartbeat = FleetHeartbeat();
-
-  final _pages = const [
-    DashboardScreen(),
-    MiningScreen(),
-    AgentChatScreen(),
-    SettingsScreen(),
-  ];
+  final _pages = const [DashboardScreen(), MiningScreen(), AgentChatScreen(), SettingsScreen()];
 
   @override
   void initState() {
@@ -85,10 +69,7 @@ class _MainShellState extends State<MainShell> {
           children: [
             Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF6600),
-                borderRadius: BorderRadius.circular(6),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFFFF6600), borderRadius: BorderRadius.circular(6)),
               child: const Text('X', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black, fontSize: 16)),
             ),
             const SizedBox(width: 10),
@@ -100,16 +81,13 @@ class _MainShellState extends State<MainShell> {
           Container(
             margin: const EdgeInsets.only(right: 12),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0x29FF6600),
-              borderRadius: BorderRadius.circular(20),
-            ),
+            decoration: BoxDecoration(color: const Color(0x29FF6600), borderRadius: BorderRadius.circular(20)),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.circle, size: 8, color: Color(0xFF22c55e)),
                 SizedBox(width: 6),
-                Text('Web Preview', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                Text('Fleet Node', style: TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
           ),
