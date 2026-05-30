@@ -1,0 +1,517 @@
+#!/usr/bin/env python3
+"""
+XMRT-Node CLI — Termux-Compatible Android Mining Node
+=====================================================
+Commands:
+  xmrt-node status    — Check node health, mining stats, fleet status
+  xmrt-node start     — Start the XMRig mining daemon
+  xmrt-node stop      — Stop the mining daemon
+  xmrt-node logs      — View recent mining logs
+  xmrt-node peers     — List fleet peers from the relay mesh
+  xmrt-node config    — View or modify configuration
+  xmrt-node install   — Run the Termux setup/install process
+
+Part of the XMRT-DAO fleet. Reports to relay.mobilemonero.com
+"""
+
+import os
+import sys
+import json
+import time
+import signal
+import subprocess
+import hashlib
+import random
+import urllib.request
+import urllib.error
+from pathlib import Path
+from datetime import datetime
+
+# ── Constants ───────────────────────────────────────────────────────────────
+VERSION = "1.0.0"
+NAME = "xmrt-node"
+
+RELAY_URL = "https://relay.mobilemonero.com"
+POOL_URL = "pool.mobilemonero.com:3333"
+POOL_WALLET = "46UxNFuGM2E3UwmZWWJicaRPoRwqwW4byQkaTHkX8yPcVihp91qAVtSFipWUGJJUyTXgzSqxzDQtNLf2bsp2DX2qCCgC5mg"
+XMRIG_VERSION = "6.21.1"
+
+HOME = Path.home()
+CONFIG_DIR = HOME / ".config" / NAME
+CONFIG_FILE = CONFIG_DIR / "config.json"
+PID_FILE = CONFIG_DIR / "xmrig.pid"
+LOG_FILE = CONFIG_DIR / "xmrig.log"
+XMRIG_DIR = CONFIG_DIR / "xmrig"
+XMRIG_BIN = XMRIG_DIR / "xmrig"
+INSTALL_MARKER = CONFIG_DIR / ".installed"
+
+# ── Utilities ───────────────────────────────────────────────────────────────
+
+def color(text, code):
+    """Print colored text (Termux compatible)."""
+    return f"\033[{code}m{text}\033[0m"
+
+def info(msg):    print(color("[*]", "36"), msg)
+def ok(msg):      print(color("[+]", "32"), msg)
+def warn(msg):    print(color("[!]", "33"), msg)
+def err(msg):     print(color("[X]", "31"), msg)
+
+def ensure_config_dir():
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+def load_config():
+    ensure_config_dir()
+    if CONFIG_FILE.exists():
+        return json.loads(CONFIG_FILE.read_text())
+    return {
+        "wallet": POOL_WALLET,
+        "pool": POOL_URL,
+        "worker": f"android-{random.randint(1000,9999)}",
+        "relay_url": RELAY_URL,
+        "max_cpu": 75,
+        "auto_start": False,
+    }
+
+def save_config(cfg):
+    ensure_config_dir()
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+    ok(f"Config saved to {CONFIG_FILE}")
+
+def relay_get(path):
+    """GET request to the relay API."""
+    try:
+        req = urllib.request.Request(f"{RELAY_URL}{path}", headers={"User-Agent": NAME})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        return {"error": str(e)}
+
+def relay_post(path, data):
+    """POST to the relay API."""
+    try:
+        body = json.dumps(data).encode()
+        req = urllib.request.Request(
+            f"{RELAY_URL}{path}",
+            data=body,
+            headers={"Content-Type": "application/json", "User-Agent": NAME}
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        return {"error": str(e)}
+
+def heartbeat(cfg, stats=None):
+    """Send fleet heartbeat to the relay."""
+    payload = {
+        "agent": "xmrt-node",
+        "worker": cfg["worker"],
+        "wallet": cfg["wallet"],
+        "pool": cfg["pool"],
+        "timestamp": datetime.utcnow().isoformat(),
+        "platform": "android-termux",
+        "version": VERSION,
+    }
+    if stats:
+        payload["stats"] = stats
+    return relay_post("/api/fleet/heartbeat", payload)
+
+def get_xmrig_pid():
+    """Read PID file and check if XMRig is running."""
+    if PID_FILE.exists():
+        try:
+            pid = int(PID_FILE.read_text().strip())
+            os.kill(pid, 0)
+            return pid
+        except (ProcessLookupError, ValueError, OSError):
+            PID_FILE.unlink(missing_ok=True)
+    return None
+
+def get_xmrig_stats():
+    """Get mining stats from XMRig API (port 19090)."""
+    try:
+        req = urllib.request.Request("http://127.0.0.1:19090/1/summary", timeout=5)
+        with urllib.request.urlopen(req) as r:
+            return json.loads(r.read())
+    except Exception:
+        return None
+
+# ── Commands ────────────────────────────────────────────────────────────────
+
+def cmd_install():
+    """Install XMRig and set up the environment."""
+    info("Starting XMRT-Node Android CLI installation...")
+    ensure_config_dir()
+
+    # Detect architecture
+    arch = subprocess.getoutput("uname -m").strip()
+    if arch not in ("aarch64", "armv7l", "armv8l"):
+        warn(f"Untested architecture: {arch}. Proceeding anyway.")
+
+    info(f"Architecture: {arch}")
+    info(f"Install directory: {XMRIG_DIR}")
+
+    # Install system dependencies via pkg (Termux)
+    info("Installing system dependencies...")
+    deps = ["wget", "curl", "proot", "cmake", "make", "gcc", "libuv", "hwloc", "openssl-tool"]
+    for dep in deps:
+        subprocess.run(["pkg", "install", "-y", dep], capture_output=True)
+
+    # Detect best XMRig binary for this architecture
+    xmrig_arch = {"aarch64": "arm64", "armv8l": "arm64", "armv7l": "armv7"}.get(arch, "arm64")
+    xmrig_url = f"https://github.com/xmrig/xmrig/releases/download/v{XMRIG_VERSION}/xmrig-{XMRIG_VERSION}-android-{xmrig_arch}.zip"
+
+    info(f"Downloading XMRig v{XMRIG_VERSION} for {xmrig_arch}...")
+    zip_path = CONFIG_DIR / "xmrig.zip"
+    try:
+        urllib.request.urlretrieve(xmrig_url, zip_path)
+    except Exception as e:
+        warn(f"Pre-built binary not available: {e}")
+        warn("Falling back to source build (this may take a while)...")
+        return cmd_install_source()
+
+    # Extract
+    info("Extracting XMRig...")
+    XMRIG_DIR.mkdir(exist_ok=True)
+    subprocess.run(["unzip", "-o", str(zip_path), "-d", str(XMRIG_DIR)], capture_output=True)
+    zip_path.unlink()
+
+    # Find the xmrig binary
+    for f in XMRIG_DIR.rglob("xmrig"):
+        if f.is_file() and os.access(f, os.X_OK):
+            f.rename(XMRIG_BIN)
+            break
+
+    if not XMRIG_BIN.exists():
+        err("Could not find xmrig binary after extraction.")
+        return False
+
+    XMRIG_BIN.chmod(0o755)
+    ok(f"XMRig installed: {XMRIG_BIN}")
+
+    # Generate default config
+    cfg = load_config()
+    generate_xmrig_config(cfg)
+    INSTALL_MARKER.touch()
+    
+    ok("Installation complete!")
+    info(f"Config: {CONFIG_FILE}")
+    info(f"Run '{NAME} start' to begin mining")
+    return True
+
+
+def cmd_install_source():
+    """Build XMRig from source (fallback for unsupported architectures)."""
+    info("Building XMRig from source...")
+    src_dir = CONFIG_DIR / "src"
+    src_dir.mkdir(exist_ok=True)
+
+    # Clone and build
+    subprocess.run(
+        ["git", "clone", "--depth", "1", "--branch", f"v{XMRIG_VERSION}",
+         "https://github.com/xmrig/xmrig.git", str(src_dir / "xmrig")],
+        capture_output=True
+    )
+
+    build_dir = src_dir / "build"
+    build_dir.mkdir(exist_ok=True)
+
+    result = subprocess.run(
+        ["cmake", "..", "-DCMAKE_BUILD_TYPE=Release", "-DWITH_HTTPD=ON"],
+        cwd=str(build_dir), capture_output=True, text=True
+    )
+
+    if result.returncode != 0:
+        err(f"CMake failed: {result.stderr[-200:]}")
+        return False
+
+    result = subprocess.run(
+        ["make", "-j$(nproc)"], cwd=str(build_dir), capture_output=True, text=True
+    )
+
+    if result.returncode != 0:
+        err(f"Make failed: {result.stderr[-200:]}")
+        return False
+
+    # Copy binary
+    built_bin = build_dir / "xmrig"
+    if built_bin.exists():
+        built_bin.rename(XMRIG_BIN)
+        XMRIG_BIN.chmod(0o755)
+        ok("XMRig built from source successfully!")
+        return True
+    
+    err("Build completed but xmrig binary not found.")
+    return False
+
+
+def generate_xmrig_config(cfg):
+    """Generate XMRig config.json."""
+    config = {
+        "autosave": True,
+        "cpu": {
+            "enabled": True,
+            "max-threads-hint": cfg.get("max_cpu", 75),
+        },
+        "pools": [{
+            "url": cfg["pool"],
+            "user": cfg["wallet"],
+            "pass": cfg.get("worker", "android-node"),
+            "keepalive": True,
+            "nicehash": False,
+        }],
+        "api": {
+            "enabled": True,
+            "host": "127.0.0.1",
+            "port": 19090,
+            "access-token": None,
+            "restricted": True,
+        },
+        "http": {
+            "enabled": True,
+            "host": "127.0.0.1",
+            "port": 19090,
+        },
+    }
+    xmrig_config = XMRIG_DIR / "config.json"
+    xmrig_config.write_text(json.dumps(config, indent=2))
+    ok("XMRig config generated")
+
+
+def cmd_start():
+    """Start the XMRig mining daemon."""
+    if not INSTALL_MARKER.exists():
+        warn("Not installed yet. Run 'xmrt-node install' first.")
+        return
+
+    pid = get_xmrig_pid()
+    if pid:
+        warn(f"XMRig is already running (PID {pid})")
+        return
+
+    cfg = load_config()
+    xmrig_config = XMRIG_DIR / "config.json"
+    if not xmrig_config.exists():
+        generate_xmrig_config(cfg)
+
+    info("Starting XMRig mining daemon...")
+    
+    # Start XMRig in background with nohup
+    log_fp = open(LOG_FILE, "a")
+    proc = subprocess.Popen(
+        [str(XMRIG_BIN), "--config", str(xmrig_config)],
+        stdout=log_fp, stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    PID_FILE.write_text(str(proc.pid))
+    ok(f"XMRig started (PID {proc.pid})")
+    info(f"Logs: {LOG_FILE}")
+
+    # Send startup heartbeat to relay
+    relay_post("/api/fleet/heartbeat", {
+        "agent": "xmrt-node",
+        "worker": cfg["worker"],
+        "wallet": cfg["wallet"],
+        "status": "started",
+        "pid": proc.pid,
+        "timestamp": datetime.utcnow().isoformat(),
+        "platform": "android-termux",
+    })
+
+
+def cmd_stop():
+    """Stop the XMRig mining daemon."""
+    pid = get_xmrig_pid()
+    if not pid:
+        warn("XMRig is not running.")
+        return
+
+    info(f"Stopping XMRig (PID {pid})...")
+    try:
+        os.kill(pid, signal.SIGTERM)
+        time.sleep(2)
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+    PID_FILE.unlink(missing_ok=True)
+    ok("XMRig stopped")
+
+    # Send stop heartbeat
+    cfg = load_config()
+    relay_post("/api/fleet/heartbeat", {
+        "agent": "xmrt-node",
+        "worker": cfg["worker"],
+        "wallet": cfg["wallet"],
+        "status": "stopped",
+        "timestamp": datetime.utcnow().isoformat(),
+        "platform": "android-termux",
+    })
+
+
+def cmd_status():
+    """Show node status, mining stats, and fleet health."""
+    cfg = load_config()
+    pid = get_xmrig_pid()
+    stats = get_xmrig_stats()
+
+    print()
+    print(color("╔══════════════════════════════════════════════╗", "34"))
+    print(color("║         XMRT-Node — Fleet Status            ║", "34"))
+    print(color("╚══════════════════════════════════════════════╝", "34"))
+    print()
+    print(f"  Version:    {VERSION}")
+    print(f"  Worker:     {cfg['worker']}")
+    print(f"  Wallet:     {cfg['wallet'][:12]}...{cfg['wallet'][-8:]}")
+    print(f"  Pool:       {cfg['pool']}")
+    print(f"  Relay:      {cfg.get('relay_url', RELAY_URL)}")
+    print()
+
+    # Mining daemon status
+    if pid:
+        print(color(f"  ⛏️  Miner:     RUNNING (PID {pid})", "32"))
+    else:
+        print(color(f"  ⛏️  Miner:     STOPPED", "31"))
+    print()
+
+    # Mining stats from XMRig API
+    if stats:
+        hashrate = stats.get("hashrate", {}).get("total", [0])[0]
+        shares = stats.get("results", {})
+        print(f"  Hashrate:   {hashrate:.0f} H/s")
+        print(f"  Shares:     {shares.get('shares_good', 0)} accepted / {shares.get('shares_total', 0)} total")
+        print(f"  Uptime:     {stats.get('uptime', 0)}s")
+        print()
+    elif pid:
+        print("  Mining stats: connecting...")
+        print()
+
+    # Fleet heartbeat check
+    info("Checking fleet relay...")
+    health = relay_get("/health")
+    if health.get("status") == "ok":
+        ok(f"Relay connected ({health.get('uptime', 0):.0f}s uptime)")
+    else:
+        warn(f"Relay: {health.get('error', 'unreachable')}")
+    print()
+
+    # Fleet peers
+    agents = relay_get("/api/fleet/agents")
+    agent_list = agents if isinstance(agents, list) else agents.get("agents", [])
+    if agent_list:
+        print(color(f"  Fleet peers ({len(agent_list)} online):", "36"))
+        for a in agent_list[:10]:
+            name = a.get("name", "?")
+            status = a.get("status", "?")
+            status_color = "32" if status == "ONLINE" else "31"
+            print(f"    {color('●', status_color)} {name:<15} {status}")
+        if len(agent_list) > 10:
+            print(f"    ... and {len(agent_list) - 10} more")
+    print()
+
+
+def cmd_logs():
+    """View recent mining logs."""
+    if not LOG_FILE.exists():
+        warn("No logs found. Start mining first with 'xmrt-node start'")
+        return
+
+    lines = LOG_FILE.read_text().splitlines()
+    # Show last 50 lines
+    for line in lines[-50:]:
+        print(line)
+
+
+def cmd_peers():
+    """List fleet peers from the relay mesh."""
+    info("Fetching fleet peers...")
+    agents = relay_get("/api/fleet/agents")
+    agent_list = agents if isinstance(agents, list) else agents.get("agents", [])
+
+    if not agent_list:
+        warn("No fleet peers found or relay unreachable.")
+        return
+
+    print()
+    print(color(f"Fleet has {len(agent_list)} agent(s) online:", "36"))
+    print()
+    for a in agent_list:
+        name = a.get("name", "?")
+        status = a.get("status", "?")
+        label = a.get("agentLabel", "")
+        last_seen = a.get("lastSeen", "")[:19] if a.get("lastSeen") else ""
+        status_icon = color("●", "32") if status == "ONLINE" else color("●", "31")
+        print(f"  {status_icon} {name:<15} {status:<8} {label:<20} {last_seen}")
+
+
+def cmd_config(args):
+    """View or modify configuration."""
+    cfg = load_config()
+
+    if not args:
+        print(json.dumps(cfg, indent=2))
+        return
+
+    # Simple key=value config update
+    for arg in args:
+        if "=" in arg:
+            key, value = arg.split("=", 1)
+            # Type coercion
+            if value.isdigit():
+                value = int(value)
+            elif value.lower() in ("true", "false"):
+                value = value.lower() == "true"
+            cfg[key] = value
+            ok(f"Set {key} = {value}")
+
+    save_config(cfg)
+    # Regenerate XMRig config if mining
+    if get_xmrig_pid():
+        warn("Config updated. Restart mining for changes to take effect: 'xmrt-node stop && xmrt-node start'")
+
+
+# ── Main ────────────────────────────────────────────────────────────────────
+
+def main():
+    if len(sys.argv) < 2:
+        print(f"XMRT-Node CLI v{VERSION} — Termux-Compatible Android Mining Node")
+        print()
+        print("Usage: xmrt-node <command> [args]")
+        print()
+        print("Commands:")
+        print("  install    Install XMRig and set up the environment")
+        print("  start      Start the mining daemon")
+        print("  stop       Stop the mining daemon")
+        print("  status     Show node and fleet status")
+        print("  logs       View recent mining logs")
+        print("  peers      List fleet peers")
+        print("  config     View or modify config (key=value)")
+        print()
+        print("Report: https://relay.mobilemonero.com")
+        return
+
+    command = sys.argv[1]
+    args = sys.argv[2:]
+
+    commands = {
+        "install": cmd_install,
+        "start": cmd_start,
+        "stop": cmd_stop,
+        "status": cmd_status,
+        "logs": cmd_logs,
+        "peers": cmd_peers,
+    }
+
+    if command == "config":
+        cmd_config(args)
+    elif command in commands:
+        commands[command]()
+    else:
+        err(f"Unknown command: {command}")
+        print("Run 'xmrt-node' without arguments for help.")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
