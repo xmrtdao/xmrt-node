@@ -19,3 +19,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    # XMRT Python agent — extracted to internal storage on first launch
+    - agent/xmrt_agent/
+    - agent/skills/
+    - agent/requirements.txt

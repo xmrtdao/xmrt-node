@@ -67,6 +67,27 @@ fi
 echo -e "${C}[*]${N} Installing XMRig mining engine..."
 "$CLI_DIR/xmrt-node" install 2>&1 || true
 
+# ── Step 7: Install Termux:API (for agent tools) ───────────────────────────
+echo -e "${C}[*]${N} Checking Termux:API app + package..."
+if ! command -v termux-battery-status &> /dev/null; then
+    echo -e "${Y}[!]${N} Termux:API not installed. The agent needs it for tools (battery, location, etc.)."
+    echo -e "    Install the Termux:API app from F-Droid: https://f-droid.org/packages/com.termux.api/"
+    echo -e "    Then run: pkg install termux-api"
+else
+    echo -e "${G}[+]${N} Termux:API already installed"
+fi
+
+# ── Step 8: Install Ollama (for local LLM) ────────────────────────────────
+echo -e "${C}[*]${N} Checking Ollama..."
+if ! command -v ollama &> /dev/null; then
+    echo -e "${Y}[!]${N} Ollama not installed."
+    echo -e "    Install with: curl -fsSL https://ollama.com/install.sh | sh"
+    echo -e "    Then sign in: ollama signin"
+    echo -e "    Then pull the default model: ollama pull deepseek-v4-flash:cloud"
+else
+    echo -e "${G}[+]${N} Ollama already installed"
+fi
+
 # ── Done ────────────────────────────────────────────────────────────────────
 echo
 echo -e "${G}╔══════════════════════════════════════════════╗${N}"
@@ -78,6 +99,12 @@ echo -e "  xmrt-node status    — Check node health"
 echo -e "  xmrt-node start     — Start mining"
 echo -e "  xmrt-node stop      — Stop mining"
 echo -e "  xmrt-node peers     — View fleet"
+echo
+echo -e "  ${Y}Agent (optional, requires Termux:API + Ollama):${N}"
+echo -e "  xmrt-node agent install  — Install Python agent"
+echo -e "  xmrt-node agent start    — Start agent"
+echo -e "  xmrt-node agent stop     — Stop agent"
+echo -e "  xmrt-node agent status   — Check agent health"
 echo
 echo -e "  ${Y}Quick start:${N}"
 echo -e "  source ~/.bashrc && xmrt-node start"
