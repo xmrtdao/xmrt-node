@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/xmrt_agent.dart';
+import '../widgets/agent_markdown_bubble.dart';
 
 /// Chat screen — talks to the local XMRT Python agent via MethodChannel + EventChannel.
 ///
@@ -390,17 +391,24 @@ class _MessageBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: msg.streaming ? Border.all(color: const Color(0xFFFF6600), width: 1) : null,
               ),
-              child: Text(
-                msg.text.isEmpty
-                    ? (msg.streaming ? '...' : '')
-                    : msg.text,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.5,
-                  color: msg.isAgent ? Colors.white : Colors.black,
-                  fontStyle: msg.streaming ? FontStyle.italic : FontStyle.normal,
-                ),
-              ),
+              // For agent: while streaming render plain text (perf); on done, render markdown.
+              // For user: always plain text.
+              child: msg.text.isEmpty
+                  ? Text(
+                      msg.streaming ? '...' : '',
+                      style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: Colors.white70),
+                    )
+                  : (msg.isAgent
+                      ? (msg.streaming
+                          ? Text(
+                              msg.text,
+                              style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.5),
+                            )
+                          : AgentMarkdownBubble(text: msg.text))
+                      : Text(
+                          msg.text,
+                          style: const TextStyle(color: Colors.black, fontSize: 13, height: 1.5),
+                        )),
             ),
           ),
           if (!msg.isAgent) const SizedBox(width: 10),
