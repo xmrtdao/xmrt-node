@@ -208,6 +208,37 @@ class MainActivity : FlutterActivity() {
                     } catch (e: Exception) { result.error("UNREACHABLE", e.message, null) }
                 }
             }
+            "agent.getSession" -> {
+                val sid = call.argument<String>("sessionId")
+                if (sid.isNullOrBlank()) {
+                    result.error("INVALID_ARGS", "sessionId is required", null)
+                    return
+                }
+                activityScope.launch {
+                    try {
+                        val resp = withContext(Dispatchers.IO) { httpGet("${AgentBridge.baseUrl()}/v1/sessions/$sid") }
+                        result.success(resp)
+                    } catch (e: Exception) { result.error("UNREACHABLE", e.message, null) }
+                }
+            }
+            "agent.deleteSession" -> {
+                val sid = call.argument<String>("sessionId")
+                if (sid.isNullOrBlank()) {
+                    result.error("INVALID_ARGS", "sessionId is required", null)
+                    return
+                }
+                activityScope.launch {
+                    try {
+                        val req = Request.Builder()
+                            .url("${AgentBridge.baseUrl()}/v1/sessions/$sid")
+                            .delete()
+                            .build()
+                        httpClient.newCall(req).execute().use { resp ->
+                            result.success(mapOf("deleted" to resp.isSuccessful))
+                        }
+                    } catch (e: Exception) { result.error("UNREACHABLE", e.message, null) }
+                }
+            }
             else -> result.notImplemented()
         }
     }

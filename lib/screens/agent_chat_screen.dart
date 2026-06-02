@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/xmrt_agent.dart';
 import '../widgets/agent_markdown_bubble.dart';
+import '../widgets/sessions_drawer.dart';
 
 /// Chat screen — talks to the local XMRT Python agent via MethodChannel + EventChannel.
 ///
@@ -28,6 +29,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   final _scrollController = ScrollController();
   final List<_Msg> _messages = [];
   final _statusMessages = <String>[];
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   AgentStatus? _status;
   bool _busy = false;
@@ -237,25 +239,95 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _statusBar(),
-        Expanded(
-          child: _messages.isEmpty
-              ? const Center(
-                  child: Text('No messages yet.', style: TextStyle(color: Colors.grey)),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _messages.length,
-                  itemBuilder: (_, i) => _MessageBubble(msg: _messages[i]),
-                ),
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: const Color(0xFF030303),
+      drawer: SessionsDrawer(
+        agent: _agent,
+        onSessionSelected: _loadSession,
+        onNewSession: _newSession,
+      ),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0C0C0C),
+        elevation: 0,
+        title: const Text(
+          'XMRT Agent',
+          style: TextStyle(color: Color(0xFFFF6600), fontSize: 16, fontWeight: FontWeight.w700),
         ),
-        if (_statusMessages.isNotEmpty) _statusLog(),
-        _inputBar(),
-      ],
+        leading: IconButton(
+          icon: const Icon(Icons.menu, color: Color(0xFFFF6600)),
+          tooltip: 'Sessions',
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white70),
+            tooltip: 'New session',
+            onPressed: _newSession,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _statusBar(),
+          Expanded(
+            child: _messages.isEmpty
+                ? const Center(
+                    child: Text('No messages yet.', style: TextStyle(color: Colors.grey)),
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (_, i) => _MessageBubble(msg: _messages[i]),
+                  ),
+          ),
+          if (_statusMessages.isNotEmpty) _statusLog(),
+          _inputBar(),
+        ],
+      ),
     );
+  }
+
+  void _newSession() {
+    setState(() {
+      _sessionId = null;
+      _messages.clear();
+      _messages.add(_Msg(
+        'XMRT Agent',
+        'New session started. Ask me anything.',
+        isAgent: true,
+      ));
+    });
+  }
+
+  Future<void> _loadSession(String sessionId) async {
+    try {
+      final detail = await _agent.getSession(sessionId);
+      setState(() {
+        _sessionId = sessionId;
+        _messages.clear();
+        for (final m in detail.messages) {
+          _messages.add(_Msg(
+            m.isAgent ? 'XMRT Agent' : 'You',
+            m.content,
+            isAgent: m.isAgent,
+            streaming: false,
+          ));
+        }
+        if (_messages.isEmpty) {
+          _messages.add(_Msg(
+            'XMRT Agent',
+            'Empty session. Send a message to continue.',
+            isAgent: true,
+          ));
+        }
+      });
+      _scaffoldKey.currentState?.closeDrawer();
+      _scrollToBottom();
+    } catch (e) {
+      _addStatus('failed to load session: $e');
+    }
   }
 
   Widget _statusBar() {

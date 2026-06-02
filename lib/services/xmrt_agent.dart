@@ -120,6 +120,22 @@ class XmrtAgent {
         .map((s) => AgentSession.fromMap(s as Map))
         .toList();
   }
+
+  /// Load all messages for a single session.
+  Future<AgentSessionDetail> getSession(String sessionId) async {
+    final res = await _methodChannel.invokeMethod<Map>('agent.getSession', {
+      'sessionId': sessionId,
+    });
+    return AgentSessionDetail.fromMap(res ?? {});
+  }
+
+  /// Delete a session and all its messages.
+  Future<bool> deleteSession(String sessionId) async {
+    final res = await _methodChannel.invokeMethod<Map>('agent.deleteSession', {
+      'sessionId': sessionId,
+    });
+    return res?['deleted'] == true;
+  }
 }
 
 class AgentStatus {
@@ -166,4 +182,50 @@ class AgentSession {
         startedAt: (m['started_at'] as int?) ?? 0,
         preview: m['preview'] as String? ?? '',
       );
+}
+
+/// A single session with all its messages loaded. Returned by
+/// [XmrtAgent.getSession].
+class AgentSessionDetail {
+  final AgentSession session;
+  final List<AgentMessage> messages;
+
+  AgentSessionDetail({required this.session, required this.messages});
+
+  factory AgentSessionDetail.fromMap(Map m) {
+    final rawMessages = m['messages'] as List? ?? [];
+    return AgentSessionDetail(
+      session: AgentSession.fromMap(m),
+      messages: rawMessages
+          .map((x) => AgentMessage.fromMap(x as Map))
+          .toList(),
+    );
+  }
+}
+
+class AgentMessage {
+  final int id;
+  final String role;
+  final String content;
+  final int timestamp;
+  final String? thinking;
+
+  AgentMessage({
+    required this.id,
+    required this.role,
+    required this.content,
+    required this.timestamp,
+    this.thinking,
+  });
+
+  factory AgentMessage.fromMap(Map m) => AgentMessage(
+        id: (m['id'] as int?) ?? 0,
+        role: m['role'] as String? ?? '',
+        content: m['content'] as String? ?? '',
+        timestamp: (m['timestamp'] as int?) ?? 0,
+        thinking: m['thinking'] as String?,
+      );
+
+  bool get isUser => role == 'user';
+  bool get isAgent => role == 'assistant';
 }
