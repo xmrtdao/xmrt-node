@@ -1,0 +1,4 @@
+# Core dependencies
+aiohttp>=3.9.0
+httpx>=0.25.0
+PyYAML>=6.0

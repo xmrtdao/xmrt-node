@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xmrt-agent"
+version = "0.1.0"
+description = "On-device AI agent for the XMRT-DAO mining node (Android/Termux)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "XMRT DAO", email = "dev@xmrtdao.io"}]
+dependencies = [
+    "aiohttp>=3.9.0",
+    "httpx>=0.25.0",
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+xmrt-agent = "xmrt_agent.cli:main"
+
+[tool.setuptools]
+packages = ["xmrt_agent"]
