@@ -1,0 +1,90 @@
+{
+    "@@locale": "en",
+    "appTitle": "XMRT Node",
+    "navDashboard": "Dashboard",
+    "navMining": "Mining",
+    "navAgent": "Agent",
+    "navSettings": "Settings",
+
+    "onboardingWelcomeTitle": "XMRT Node",
+    "onboardingWelcomeSubtitle": "MobileMonero node, in your pocket.",
+    "onboardingWelcomeIntro": "You're about to set up:",
+    "onboardingBulletMining": "Mining to the XMRT-DAO pool",
+    "onboardingBulletFleet": "Fleet heartbeat to relay.mobilemonero.com",
+    "onboardingBulletAgent": "On-device AI agent (cloud-backed by default)",
+    "onboardingBulletMemory": "Memory + skills — the agent learns as you use it",
+
+    "onboardingWorkerTitle": "Worker name",
+    "onboardingWorkerSubtitle": "This is how your node shows up in the fleet dashboard.",
+    "onboardingWorkerHint": "Letters, numbers, dashes. Shows up on the relay dashboard.",
+
+    "onboardingProviderTitle": "AI Provider",
+    "onboardingProviderSubtitle": "Cloud is recommended for 4-6 GB phones (no GPU, no battery drain). Local is opt-in.",
+    "onboardingProviderCloud": "Cloud (recommended)",
+    "onboardingProviderCloudSubtitle": "deepseek-v4-flash:cloud via Ollama OAuth. Works on any phone, no GPU required.",
+    "onboardingProviderLocal": "Local (8 GB+ phones only)",
+    "onboardingProviderLocalSubtitle": "Runs a small model on-device. Offline. Hot phone. Slower responses.",
+
+    "onboardingHardwareTitle": "Hardware check",
+    "onboardingHardwareSubtitle": "The agent needs Termux + Ollama running on the device. Let's see what you've got.",
+    "onboardingHardwareCheckNow": "Check now",
+    "onboardingHardwareChecking": "Checking...",
+    "onboardingHardwareRunning": "Agent: running",
+    "onboardingHardwareInstalled": "Agent: installed (not running)",
+    "onboardingHardwareNotInstalled": "Agent: not installed",
+    "onboardingHardwareUnknown": "Agent: unknown",
+    "onboardingHardwareHintRunning": "Agent is already running. You're all set.",
+    "onboardingHardwareHintInstalled": "Agent installed but not running. Open the Agent tab to start it.",
+    "onboardingHardwareHintNotInstalled": "Agent not installed yet. We'll auto-extract from the APK on first Agent-tab visit. After that, install Termux + Ollama on the phone, then start the agent from the Agent tab.",
+    "onboardingHardwareHintUnreachable": "Could not reach the agent. Make sure Termux is running and Ollama is installed.",
+
+    "back": "Back",
+    "next": "Next",
+    "getStarted": "Get started",
+
+    "agentSessions": "Sessions",
+    "agentSessionsEmpty": "No past sessions.\nStart chatting to create one.",
+    "agentNewSession": "New session",
+    "agentSessionMessages": "{count, plural, =0{No messages} =1{1 message} other{{count} messages}}",
+    "@agentSessionMessages": {
+        "placeholders": {
+            "count": { "type": "int" }
+        }
+    },
+    "agentNoMessages": "No messages yet.",
+    "agentHintEmpty": "Ready when you are. Ask me about mining, fleet, DAO, or Monero.",
+    "agentHintNew": "New session started. Ask me anything.",
+    "agentHintLoaded": "Empty session. Send a message to continue.",
+    "agentMessagePlaceholder": "Message XMRT Agent...",
+    "agentMessagePlaceholderStopped": "Agent not running",
+    "agentMemory": "Memory",
+    "agentSoul": "Soul",
+    "agentSkills": "Skills",
+    "agentEdit": "Edit",
+    "agentPreview": "Preview",
+    "agentSave": "Save",
+    "agentSaved": "Saved",
+    "agentPickSkill": "Pick a skill to view",
+
+    "fleetSection": "Fleet Node",
+    "fleetStatus": "Status",
+    "fleetRegistered": "Registered",
+    "fleetPool": "Pool",
+    "fleetWorker": "Worker",
+    "fleetWallet": "Wallet",
+
+    "configSection": "Configuration",
+    "configCpu": "CPU Threads",
+    "configAiModel": "AI Model",
+    "configRelay": "Relay",
+    "configHeartbeat": "Heartbeat",
+    "configHeartbeatValue": "Every 60s",
+
+    "aboutSection": "About",
+    "aboutVersion": "Version",
+    "aboutFramework": "Framework",
+
+    "resetOnboarding": "Reset Onboarding",
+    "resetOnboardingHint": "Onboarding reset. Restart the app to see the wizard.",
+    "resetNode": "Reset Node"
+}

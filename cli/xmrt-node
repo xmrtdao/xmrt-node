@@ -471,6 +471,212 @@ def cmd_config(args):
         warn("Config updated. Restart mining for changes to take effect: 'xmrt-node stop && xmrt-node start'")
 
 
+# ── Agent commands ───────────────────────────────────────────────────────────
+
+AGENT_DIR = HOME / ".local" / "share" / "xmrt-agent"
+AGENT_PID = AGENT_DIR / "agent.pid"
+AGENT_LOG = AGENT_DIR / "agent.log"
+AGENT_PORT = 8642
+AGENT_REQUIREMENTS = ["aiohttp>=3.9.0", "httpx>=0.25.0", "PyYAML>=6.0"]
+
+
+def agent_install():
+    """Install the Python agent: copy source from repo, install deps, write config.
+
+    Expects the agent source to be at <repo>/agent/ relative to this CLI script.
+    In a release build, the source is bundled; in dev, we look upward.
+    """
+    info("Installing XMRT agent...")
+
+    # Find the agent source dir. CLI lives at <repo>/cli/xmrt-node
+    cli_path = Path(__file__).resolve()
+    repo_root = cli_path.parent.parent
+    agent_src = repo_root / "agent"
+
+    if not (agent_src / "xmrt_agent" / "__main__.py").exists():
+        err(f"Agent source not found at {agent_src}/xmrt_agent/__main__.py")
+        err("Are you running this from a git clone of xmrt-node?")
+        return False
+
+    # Copy the agent package
+    AGENT_DIR.mkdir(parents=True, exist_ok=True)
+    for sub in ["xmrt_agent", "skills", "requirements.txt"]:
+        src = agent_src / sub
+        dst = AGENT_DIR / sub
+        if not src.exists():
+            warn(f"Skipping missing {sub}")
+            continue
+        if dst.exists():
+            import shutil
+            shutil.rmtree(dst) if dst.is_dir() else dst.unlink()
+        if src.is_dir():
+            import shutil
+            shutil.copytree(src, dst)
+        else:
+            import shutil
+            shutil.copy2(src, dst)
+        ok(f"copied {sub}")
+
+    # Install Python deps via pip
+    info("Installing Python dependencies...")
+    pip_cmd = [sys.executable, "-m", "pip", "install", "-q", "-r", str(AGENT_DIR / "requirements.txt")]
+    try:
+        subprocess.run(pip_cmd, check=True, capture_output=True, text=True)
+        ok("Python deps installed")
+    except subprocess.CalledProcessError as e:
+        err(f"pip install failed: {e.stderr[-500:]}")
+        return False
+
+    ok(f"Agent installed at {AGENT_DIR}")
+    info("Start it with: xmrt-node agent start")
+    return True
+
+
+def agent_get_pid():
+    if not AGENT_PID.exists():
+        return None
+    try:
+        pid = int(AGENT_PID.read_text().strip())
+        os.kill(pid, 0)
+        return pid
+    except (ProcessLookupError, ValueError, OSError):
+        AGENT_PID.unlink(missing_ok=True)
+        return None
+
+
+def agent_start():
+    pid = agent_get_pid()
+    if pid:
+        warn(f"Agent already running (pid {pid})")
+        return
+    if not (AGENT_DIR / "xmrt_agent" / "__main__.py").exists():
+        err("Agent not installed. Run: xmrt-node agent install")
+        return
+    info(f"Starting agent from {AGENT_DIR}...")
+
+    # Use python3 -m xmrt_agent. Detach so it survives the CLI exit.
+    log_fp = open(AGENT_LOG, "ab")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(AGENT_DIR)
+    env["PYTHONUNBUFFERED"] = "1"
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "xmrt_agent"],
+            cwd=str(AGENT_DIR),
+            stdout=log_fp, stderr=subprocess.STDOUT,
+            start_new_session=True,
+            env=env,
+        )
+        AGENT_PID.write_text(str(proc.pid))
+        ok(f"Agent started (pid {proc.pid}), logs at {AGENT_LOG}")
+    except Exception as e:
+        err(f"Failed to start: {e}")
+
+
+def agent_stop():
+    pid = agent_get_pid()
+    if not pid:
+        warn("Agent not running")
+        return
+    info(f"Stopping agent (pid {pid})...")
+    try:
+        os.kill(pid, signal.SIGTERM)
+        # Wait up to 5s for clean exit
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        try:
+            os.kill(pid, 0)
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        AGENT_PID.unlink(missing_ok=True)
+        ok("Agent stopped")
+    except Exception as e:
+        err(f"Failed to stop: {e}")
+
+
+def agent_status():
+    pid = agent_get_pid()
+    installed = (AGENT_DIR / "xmrt_agent" / "__main__.py").exists()
+
+    print(f"Agent installed: {'yes' if installed else 'no'}")
+    if installed:
+        print(f"Agent dir:       {AGENT_DIR}")
+    print(f"Agent running:   {'yes (pid ' + str(pid) + ')' if pid else 'no'}")
+    print(f"Log file:        {AGENT_LOG}")
+
+    # Try the health endpoint
+    if pid:
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{AGENT_PORT}/health", headers={"User-Agent": NAME})
+            with urllib.request.urlopen(req, timeout=2) as r:
+                data = json.loads(r.read())
+                print(f"Health endpoint: {r.status} (status={data.get('status')})")
+                if "providers" in data:
+                    print(f"Primary model:   {data['providers'][0].get('model', '?')}")
+                if "tools" in data:
+                    print(f"Tools loaded:    {len(data['tools'])}")
+                if "skills" in data:
+                    print(f"Skills loaded:   {len(data['skills'])}")
+        except Exception as e:
+            warn(f"Health check failed: {e}")
+
+
+def agent_logs():
+    if not AGENT_LOG.exists():
+        warn("No log file yet")
+        return
+    try:
+        # tail -n 50 equivalent
+        with open(AGENT_LOG, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            block = 4096
+            data = b""
+            while size > 0 and len(data) < 50_000:
+                read_size = min(block, size)
+                f.seek(size - read_size)
+                data = f.read(read_size) + data
+                size -= read_size
+            text = data.decode("utf-8", errors="replace")
+            lines = text.splitlines()[-50:]
+            print("\n".join(lines))
+    except Exception as e:
+        err(f"Failed to read log: {e}")
+
+
+def agent_chat(message):
+    """Quick non-streaming chat via the agent."""
+    pid = agent_get_pid()
+    if not pid:
+        err("Agent not running. Run: xmrt-node agent start")
+        return
+    import urllib.error
+    payload = json.dumps({
+        "model": "deepseek-v4-flash:cloud",
+        "messages": [{"role": "user", "content": message}],
+        "stream": False,
+    }).encode()
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{AGENT_PORT}/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json", "User-Agent": NAME},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            data = json.loads(r.read())
+            choices = data.get("choices", [])
+            if choices:
+                content = choices[0].get("message", {}).get("content", "")
+                print(content)
+    except urllib.error.URLError as e:
+        err(f"Chat failed: {e}")
+
+
 # ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -480,13 +686,21 @@ def main():
         print("Usage: xmrt-node <command> [args]")
         print()
         print("Commands:")
-        print("  install    Install XMRig and set up the environment")
-        print("  start      Start the mining daemon")
-        print("  stop       Stop the mining daemon")
-        print("  status     Show node and fleet status")
-        print("  logs       View recent mining logs")
-        print("  peers      List fleet peers")
-        print("  config     View or modify config (key=value)")
+        print("  install         Install XMRig and set up the environment")
+        print("  start           Start the mining daemon")
+        print("  stop            Stop the mining daemon")
+        print("  status          Show node and fleet status")
+        print("  logs            View recent mining logs")
+        print("  peers           List fleet peers")
+        print("  config          View or modify config (key=value)")
+        print()
+        print("Agent commands (optional, requires Termux:API + Ollama):")
+        print("  agent install   Install the Python agent from <repo>/agent/")
+        print("  agent start     Start agent on port 8642")
+        print("  agent stop      Stop the agent")
+        print("  agent status    Show agent health + model info")
+        print("  agent logs      Tail agent log")
+        print("  agent chat MSG  Send one message, get reply")
         print()
         print("Report: https://relay.mobilemonero.com")
         return
@@ -505,6 +719,28 @@ def main():
 
     if command == "config":
         cmd_config(args)
+    elif command == "agent":
+        if len(sys.argv) < 3:
+            err("Usage: xmrt-node agent <install|start|stop|status|logs|chat>")
+            return
+        sub = sys.argv[2]
+        if sub == "install":
+            agent_install()
+        elif sub == "start":
+            agent_start()
+        elif sub == "stop":
+            agent_stop()
+        elif sub == "status":
+            agent_status()
+        elif sub == "logs":
+            agent_logs()
+        elif sub == "chat":
+            if len(sys.argv) < 4:
+                err("Usage: xmrt-node agent chat <message>")
+            else:
+                agent_chat(" ".join(sys.argv[3:]))
+        else:
+            err(f"Unknown agent subcommand: {sub}")
     elif command in commands:
         commands[command]()
     else:
