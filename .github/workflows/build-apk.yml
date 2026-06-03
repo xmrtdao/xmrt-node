@@ -50,7 +50,7 @@ jobs:
           echo "=== MANIFEST BEFORE BUILD ==="
           cat android/app/src/main/AndroidManifest.xml
           echo "=== END MANIFEST ==="
-          flutter build apk --release --target-platform android-arm64 --verbose 2>&1 | tail -300
+          flutter build apk --release --target-platform android-arm64 --ignore-deprecation --verbose 2>&1 | tail -300
           echo "flutter_exit=${PIPESTATUS[0]}"
           test "${PIPESTATUS[0]}" -eq 0
 
