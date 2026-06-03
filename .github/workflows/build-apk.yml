@@ -47,7 +47,20 @@ jobs:
       - name: Build APK
         run: |
           set -eo pipefail
-          flutter build apk --release --target-platform android-arm64 --ignore-deprecation 2>&1 | tail -200
+          # Debug: parse the manifest the way Flutter does
+          echo "=== MANIFEST AS FLUTTER SEES IT ==="
+          python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('android/app/src/main/AndroidManifest.xml')
+          root = tree.getroot()
+          ns = '{http://schemas.android.com/apk/res/android}'
+          for app in root.findall(f'{ns}application') + root.findall('application'):
+              print('  application android:name =', app.get(f'{ns}name'))
+              for md in app.findall(f'{ns}meta-data') + app.findall('meta-data'):
+                  print('  meta-data android:name =', md.get(f'{ns}name'), ' android:value =', md.get(f'{ns}value'))
+          "
+          echo "=== END ==="
+          flutter build apk --release --target-platform android-arm64 2>&1 | tail -200
           echo "flutter_exit=${PIPESTATUS[0]}"
           test "${PIPESTATUS[0]}" -eq 0
 
