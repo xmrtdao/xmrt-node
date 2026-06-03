@@ -47,18 +47,26 @@ jobs:
       - name: Build APK
         run: |
           set -eo pipefail
-          # Debug: parse the manifest the way Flutter does
-          echo "=== MANIFEST AS FLUTTER SEES IT ==="
-          python3 -c "
-          import xml.etree.ElementTree as ET
-          tree = ET.parse('android/app/src/main/AndroidManifest.xml')
-          root = tree.getroot()
-          ns = '{http://schemas.android.com/apk/res/android}'
-          for app in root.findall(f'{ns}application') + root.findall('application'):
-              print('  application android:name =', app.get(f'{ns}name'))
-              for md in app.findall(f'{ns}meta-data') + app.findall('meta-data'):
-                  print('  meta-data android:name =', md.get(f'{ns}name'), ' android:value =', md.get(f'{ns}value'))
-          "
+          # Use Flutter's own dart to parse with the same package:xml version
+          FLUTTER_DART="$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart"
+          echo "=== PARSING WITH FLUTTER'S DART ==="
+          "$FLUTTER_DART" -e '
+            import "package:xml/xml.dart";
+            import "dart:io";
+            void main() {
+              final f = File("android/app/src/main/AndroidManifest.xml");
+              print("Path: " + f.absolute.path);
+              print("Exists: " + f.existsSync());
+              final doc = XmlDocument.parse(f.readAsStringSync());
+              print("Top-level: " + doc.rootElement.name.qualified);
+              for (final app in doc.findAllElements("application")) {
+                print("application android:name=" + (app.getAttribute("android:name") ?? "null"));
+              }
+              for (final md in doc.findAllElements("meta-data")) {
+                print("meta-data android:name=" + (md.getAttribute("android:name") ?? "null") + " android:value=" + (md.getAttribute("android:value") ?? "null"));
+              }
+            }
+          ' 2>&1 || echo "(dart -e needs --packages, trying alternate)"
           echo "=== END ==="
           flutter build apk --release --target-platform android-arm64 2>&1 | tail -200
           echo "flutter_exit=${PIPESTATUS[0]}"
