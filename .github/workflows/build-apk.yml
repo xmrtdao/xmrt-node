@@ -47,27 +47,6 @@ jobs:
       - name: Build APK
         run: |
           set -eo pipefail
-          # Use Flutter's own dart to parse with the same package:xml version
-          FLUTTER_DART="$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart"
-          echo "=== PARSING WITH FLUTTER'S DART ==="
-          "$FLUTTER_DART" -e '
-            import "package:xml/xml.dart";
-            import "dart:io";
-            void main() {
-              final f = File("android/app/src/main/AndroidManifest.xml");
-              print("Path: " + f.absolute.path);
-              print("Exists: " + f.existsSync());
-              final doc = XmlDocument.parse(f.readAsStringSync());
-              print("Top-level: " + doc.rootElement.name.qualified);
-              for (final app in doc.findAllElements("application")) {
-                print("application android:name=" + (app.getAttribute("android:name") ?? "null"));
-              }
-              for (final md in doc.findAllElements("meta-data")) {
-                print("meta-data android:name=" + (md.getAttribute("android:name") ?? "null") + " android:value=" + (md.getAttribute("android:value") ?? "null"));
-              }
-            }
-          ' 2>&1 || echo "(dart -e needs --packages, trying alternate)"
-          echo "=== END ==="
           flutter build apk --release --target-platform android-arm64 2>&1 | tail -200
           echo "flutter_exit=${PIPESTATUS[0]}"
           test "${PIPESTATUS[0]}" -eq 0
