@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/config.dart';
+import '../services/onboarding.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
+  final OnboardingService service;
+  const SettingsScreen({super.key, required this.service});
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +14,7 @@ class SettingsScreen extends StatelessWidget {
         _section('Fleet Node'),
         _tile(Icons.wifi, 'Status', 'Registered'),
         _tile(Icons.hub, 'Pool', NodeConfig.fleetPool),
-        _tile(Icons.person_outline, 'Worker', NodeConfig.defaultWorker),
+        _tile(Icons.person_outline, 'Worker', service.workerName),
         _tile(Icons.account_balance_wallet, 'Wallet', '${NodeConfig.fleetWallet.substring(0, 16)}...'),
         const SizedBox(height: 24),
         _section('Configuration'),
@@ -25,6 +27,29 @@ class SettingsScreen extends StatelessWidget {
         _tile(Icons.info_outline, 'Version', '1.0.0'),
         _tile(Icons.code, 'Framework', 'Flutter 3.x'),
         const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              await service.reset();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Onboarding reset. Restart the app to see the wizard.'),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.replay),
+            label: const Text('Reset Onboarding'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFFF6600),
+              side: const BorderSide(color: Color(0xFFFF6600)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(

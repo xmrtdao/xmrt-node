@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/onboarding.dart';
 import '../services/xmrt_agent.dart';
 import '../widgets/agent_markdown_bubble.dart';
 import '../widgets/sessions_drawer.dart';
@@ -18,7 +19,8 @@ import 'agent_editors.dart';
 ///
 /// SSE parsing is minimal: we just split on `\n\n` and look for `data: ` lines.
 class AgentChatScreen extends StatefulWidget {
-  const AgentChatScreen({super.key});
+  final OnboardingService service;
+  const AgentChatScreen({super.key, required this.service});
 
   @override
   State<AgentChatScreen> createState() => _AgentChatScreenState();
