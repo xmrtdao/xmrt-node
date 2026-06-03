@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_localizations.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/main_shell.dart';
 import 'services/onboarding.dart';
@@ -18,6 +20,8 @@ class XMRTNodeApp extends StatelessWidget {
     return MaterialApp(
       title: 'XMRT Node',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData.dark().copyWith(
         colorScheme: ColorScheme.dark(
           primary: const Color(0xFFFF6600),

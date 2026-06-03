@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../services/onboarding.dart';
 import '../services/xmrt_agent.dart';
 import 'main_shell.dart';
@@ -84,13 +85,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _installState = status.state;
         _checking = false;
         if (status.state == 'running') {
-          _hardwareHint = 'Agent is already running. You\'re all set.';
+          _hardwareHint = AppLocalizations.of(context)!.onboardingHardwareHintRunning;
         } else if (status.state == 'installed_not_running') {
-          _hardwareHint = 'Agent installed but not running. Open the Agent tab to start it.';
+          _hardwareHint = AppLocalizations.of(context)!.onboardingHardwareHintInstalled;
         } else if (status.state == 'not_installed') {
-          _hardwareHint = 'Agent not installed yet. We\'ll auto-extract from the APK on first Agent-tab visit. After that, install Termux + Ollama on the phone, then start the agent from the Agent tab.';
+          _hardwareHint = AppLocalizations.of(context)!.onboardingHardwareHintNotInstalled;
         } else {
-          _hardwareHint = 'Could not reach the agent. Make sure Termux is running and Ollama is installed.';
+          _hardwareHint = AppLocalizations.of(context)!.onboardingHardwareHintUnreachable;
         }
       });
     } catch (e) {
@@ -159,7 +160,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           if (_step > 0)
             TextButton(
               onPressed: _back,
-              child: const Text('Back', style: TextStyle(color: Colors.white70)),
+              child: Text(AppLocalizations.of(context)!.back, style: const TextStyle(color: Colors.white70)),
             ),
           const Spacer(),
           if (_step < 3)
@@ -170,7 +171,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
               ),
-              child: const Text('Next', style: TextStyle(fontWeight: FontWeight.w700)),
+              child: Text(AppLocalizations.of(context)!.next, style: const TextStyle(fontWeight: FontWeight.w700)),
             )
           else
             ElevatedButton(
@@ -180,7 +181,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
               ),
-              child: const Text('Get started', style: TextStyle(fontWeight: FontWeight.w700)),
+              child: Text(AppLocalizations.of(context)!.getStarted, style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
         ],
       ),
@@ -204,29 +205,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: const Icon(Icons.bolt, color: Color(0xFFFF6600), size: 56),
           ),
           const SizedBox(height: 24),
-          const Text(
-            'XMRT Node',
-            style: TextStyle(
+          Text(
+            AppLocalizations.of(context)!.onboardingWelcomeTitle,
+            style: const TextStyle(
               color: Color(0xFFFF6600),
               fontSize: 32,
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'MobileMonero node, in your pocket.',
-            style: TextStyle(color: Colors.white60, fontSize: 14),
+          Text(
+            AppLocalizations.of(context)!.onboardingWelcomeSubtitle,
+            style: const TextStyle(color: Colors.white60, fontSize: 14),
           ),
           const SizedBox(height: 32),
-          const Text(
-            'You\'re about to set up:',
-            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+          Text(
+            AppLocalizations.of(context)!.onboardingWelcomeIntro,
+            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
-          _bullet('Mining to the XMRT-DAO pool'),
-          _bullet('Fleet heartbeat to relay.mobilemonero.com'),
-          _bullet('On-device AI agent (cloud-backed by default)'),
-          _bullet('Memory + skills — the agent learns as you use it'),
+          _bullet(AppLocalizations.of(context)!.onboardingBulletMining),
+          _bullet(AppLocalizations.of(context)!.onboardingBulletFleet),
+          _bullet(AppLocalizations.of(context)!.onboardingBulletAgent),
+          _bullet(AppLocalizations.of(context)!.onboardingBulletMemory),
         ],
       ),
     );
@@ -254,11 +255,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('Worker name', style: TextStyle(color: Color(0xFFFF6600), fontSize: 24, fontWeight: FontWeight.w800)),
+          Text(AppLocalizations.of(context)!.onboardingWorkerTitle, style: const TextStyle(color: Color(0xFFFF6600), fontSize: 24, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          const Text(
-            'This is how your node shows up in the fleet dashboard.',
-            style: TextStyle(color: Colors.white60, fontSize: 13),
+          Text(
+            AppLocalizations.of(context)!.onboardingWorkerSubtitle,
+            style: const TextStyle(color: Colors.white60, fontSize: 13),
           ),
           const SizedBox(height: 24),
           TextField(
@@ -280,9 +281,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Letters, numbers, dashes. Shows up on the relay dashboard.',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
+          Text(
+            AppLocalizations.of(context)!.onboardingWorkerHint,
+            style: const TextStyle(color: Colors.white38, fontSize: 12),
           ),
         ],
       ),
@@ -297,17 +298,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('AI Provider', style: TextStyle(color: Color(0xFFFF6600), fontSize: 24, fontWeight: FontWeight.w800)),
+          Text(AppLocalizations.of(context)!.onboardingProviderTitle, style: const TextStyle(color: Color(0xFFFF6600), fontSize: 24, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          const Text(
-            'Cloud is recommended for 4-6 GB phones (no GPU, no battery drain). Local is opt-in.',
-            style: TextStyle(color: Colors.white60, fontSize: 13),
+          Text(
+            AppLocalizations.of(context)!.onboardingProviderSubtitle,
+            style: const TextStyle(color: Colors.white60, fontSize: 13),
           ),
           const SizedBox(height: 24),
           _providerCard(
             key: const ValueKey('cloud'),
-            title: 'Cloud (recommended)',
-            subtitle: 'deepseek-v4-flash:cloud via Ollama OAuth. Works on any phone, no GPU required.',
+            title: AppLocalizations.of(context)!.onboardingProviderCloud,
+            subtitle: AppLocalizations.of(context)!.onboardingProviderCloudSubtitle,
             icon: Icons.cloud_outlined,
             value: 'ollama_cloud',
             groupValue: _provider,
@@ -316,8 +317,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 12),
           _providerCard(
             key: const ValueKey('local'),
-            title: 'Local (8 GB+ phones only)',
-            subtitle: 'Runs a small model on-device. Offline. Hot phone. Slower responses.',
+            title: AppLocalizations.of(context)!.onboardingProviderLocal,
+            subtitle: AppLocalizations.of(context)!.onboardingProviderLocalSubtitle,
             icon: Icons.phone_android,
             value: 'local_optional',
             groupValue: _provider,
@@ -379,11 +380,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('Hardware check', style: TextStyle(color: Color(0xFFFF6600), fontSize: 24, fontWeight: FontWeight.w800)),
+          Text(AppLocalizations.of(context)!.onboardingHardwareTitle, style: const TextStyle(color: Color(0xFFFF6600), fontSize: 24, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          const Text(
-            'The agent needs Termux + Ollama running on the device. Let\'s see what you\'ve got.',
-            style: TextStyle(color: Colors.white60, fontSize: 13),
+          Text(
+            AppLocalizations.of(context)!.onboardingHardwareSubtitle,
+            style: const TextStyle(color: Colors.white60, fontSize: 13),
           ),
           const SizedBox(height: 24),
           Center(
@@ -391,7 +392,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               icon: _checking
                   ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF6600)))
                   : const Icon(Icons.check_circle_outline, color: Color(0xFFFF6600)),
-              label: Text(_checking ? 'Checking...' : 'Check now', style: const TextStyle(color: Color(0xFFFF6600), fontWeight: FontWeight.w600)),
+              label: Text(_checking ? AppLocalizations.of(context)!.onboardingHardwareChecking : AppLocalizations.of(context)!.onboardingHardwareCheckNow, style: const TextStyle(color: Color(0xFFFF6600), fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0x1AFFFF6600),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -416,10 +417,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Widget _statusChip() {
     final (color, icon, label) = switch (_installState) {
-      'running' => (const Color(0xFF22c55e), Icons.check_circle, 'Agent: running'),
-      'installed_not_running' => (const Color(0xFFfbbf24), Icons.pause_circle, 'Agent: installed (not running)'),
-      'not_installed' => (const Color(0xFFf87171), Icons.cancel, 'Agent: not installed'),
-      _ => (Colors.grey, Icons.help_outline, 'Agent: unknown'),
+      'running' => (const Color(0xFF22c55e), Icons.check_circle, AppLocalizations.of(context)!.onboardingHardwareRunning),
+      'installed_not_running' => (const Color(0xFFfbbf24), Icons.pause_circle, AppLocalizations.of(context)!.onboardingHardwareInstalled),
+      'not_installed' => (const Color(0xFFf87171), Icons.cancel, AppLocalizations.of(context)!.onboardingHardwareNotInstalled),
+      _ => (Colors.grey, Icons.help_outline, AppLocalizations.of(context)!.onboardingHardwareUnknown),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

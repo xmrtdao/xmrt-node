@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../l10n/app_localizations.dart';
 import '../services/onboarding.dart';
 import '../services/xmrt_agent.dart';
 import '../widgets/agent_markdown_bubble.dart';
@@ -276,29 +277,29 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
               if (value == 'soul') _openEditor(const AgentSoulEditor(agent: _agent));
               if (value == 'skills') _openEditor(const AgentSkillsBrowser(agent: _agent));
             },
-            itemBuilder: (_) => const [
+            itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'memory',
                 child: Row(children: [
-                  Icon(Icons.psychology_outlined, color: Color(0xFFFF6600), size: 18),
-                  SizedBox(width: 10),
-                  Text('Memory', style: TextStyle(color: Colors.white)),
+                  const Icon(Icons.psychology_outlined, color: Color(0xFFFF6600), size: 18),
+                  const SizedBox(width: 10),
+                  Text(AppLocalizations.of(context)!.agentMemory, style: const TextStyle(color: Colors.white)),
                 ]),
               ),
               PopupMenuItem(
                 value: 'soul',
                 child: Row(children: [
-                  Icon(Icons.face_retouch_natural, color: Color(0xFFFF6600), size: 18),
-                  SizedBox(width: 10),
-                  Text('Soul', style: TextStyle(color: Colors.white)),
+                  const Icon(Icons.face_retouch_natural, color: Color(0xFFFF6600), size: 18),
+                  const SizedBox(width: 10),
+                  Text(AppLocalizations.of(context)!.agentSoul, style: const TextStyle(color: Colors.white)),
                 ]),
               ),
               PopupMenuItem(
                 value: 'skills',
                 child: Row(children: [
-                  Icon(Icons.layers_outlined, color: Color(0xFFFF6600), size: 18),
-                  SizedBox(width: 10),
-                  Text('Skills', style: TextStyle(color: Colors.white)),
+                  const Icon(Icons.layers_outlined, color: Color(0xFFFF6600), size: 18),
+                  const SizedBox(width: 10),
+                  Text(AppLocalizations.of(context)!.agentSkills, style: const TextStyle(color: Colors.white)),
                 ]),
               ),
             ],

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
+import '../screens/agent_chat_screen.dart';
+import '../screens/dashboard_screen.dart';
+import '../screens/mining_screen.dart';
+import '../screens/settings_screen.dart';
 import '../services/fleet_heartbeat.dart';
 import '../services/mining_service.dart';
 import '../services/onboarding.dart';
-import 'agent_chat_screen.dart';
-import 'dashboard_screen.dart';
-import 'mining_screen.dart';
-import 'settings_screen.dart';
 
 /// Bottom-tab shell. 4 destinations: Dashboard, Mining, Agent, Settings.
 class MainShell extends StatefulWidget {
@@ -77,11 +78,27 @@ class _MainShellState extends State<MainShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.memory_outlined), selectedIcon: Icon(Icons.memory), label: 'Mining'),
-          NavigationDestination(icon: Icon(Icons.smart_toy_outlined), selectedIcon: Icon(Icons.smart_toy), label: 'Agent'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.dashboard_outlined),
+            selectedIcon: const Icon(Icons.dashboard),
+            label: AppLocalizations.of(context)!.navDashboard,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.memory_outlined),
+            selectedIcon: const Icon(Icons.memory),
+            label: AppLocalizations.of(context)!.navMining,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.smart_toy_outlined),
+            selectedIcon: const Icon(Icons.smart_toy),
+            label: AppLocalizations.of(context)!.navAgent,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.settings_outlined),
+            selectedIcon: const Icon(Icons.settings),
+            label: AppLocalizations.of(context)!.navSettings,
+          ),
         ],
       ),
     );

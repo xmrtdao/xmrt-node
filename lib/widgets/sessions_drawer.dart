@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../services/xmrt_agent.dart';
 
 /// Drawer that lists past agent sessions and lets the user load one.
@@ -115,9 +116,9 @@ class _SessionsDrawerState extends State<SessionsDrawer> {
                 children: [
                   const Icon(Icons.history, color: Color(0xFFFF6600)),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Sessions',
-                    style: TextStyle(
+                  Text(
+                    AppLocalizations.of(context)!.agentSessions,
+                    style: const TextStyle(
                       color: Color(0xFFFF6600),
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -177,12 +178,12 @@ class _SessionsDrawerState extends State<SessionsDrawer> {
       );
     }
     if (_sessions.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
           child: Text(
-            'No past sessions.\nStart chatting to create one.',
-            style: TextStyle(color: Colors.white60, fontSize: 13),
+            AppLocalizations.of(context)!.agentSessionsEmpty,
+            style: const TextStyle(color: Colors.white60, fontSize: 13),
             textAlign: TextAlign.center,
           ),
         ),
