@@ -45,7 +45,11 @@ jobs:
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release --target-platform android-arm64 --verbose 2>&1 | tail -300; echo "EXIT=$?"
+        run: |
+          set -eo pipefail
+          flutter build apk --release --target-platform android-arm64 --verbose 2>&1 | tail -300
+          echo "flutter_exit=${PIPESTATUS[0]}"
+          test "${PIPESTATUS[0]}" -eq 0
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
