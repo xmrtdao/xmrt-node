@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../services/xmrt_agent.dart';
 import '../widgets/agent_markdown_bubble.dart';
 import '../widgets/sessions_drawer.dart';
+import 'agent_editors.dart';
 
 /// Chat screen — talks to the local XMRT Python agent via MethodChannel + EventChannel.
 ///
@@ -265,6 +266,41 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
             tooltip: 'New session',
             onPressed: _newSession,
           ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white70),
+            color: const Color(0xFF12121a),
+            onSelected: (value) {
+              if (value == 'memory') _openEditor(const AgentMemoryEditor(agent: _agent));
+              if (value == 'soul') _openEditor(const AgentSoulEditor(agent: _agent));
+              if (value == 'skills') _openEditor(const AgentSkillsBrowser(agent: _agent));
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'memory',
+                child: Row(children: [
+                  Icon(Icons.psychology_outlined, color: Color(0xFFFF6600), size: 18),
+                  SizedBox(width: 10),
+                  Text('Memory', style: TextStyle(color: Colors.white)),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'soul',
+                child: Row(children: [
+                  Icon(Icons.face_retouch_natural, color: Color(0xFFFF6600), size: 18),
+                  SizedBox(width: 10),
+                  Text('Soul', style: TextStyle(color: Colors.white)),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'skills',
+                child: Row(children: [
+                  Icon(Icons.layers_outlined, color: Color(0xFFFF6600), size: 18),
+                  SizedBox(width: 10),
+                  Text('Skills', style: TextStyle(color: Colors.white)),
+                ]),
+              ),
+            ],
+          ),
         ],
       ),
       body: Column(
@@ -328,6 +364,12 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     } catch (e) {
       _addStatus('failed to load session: $e');
     }
+  }
+
+  void _openEditor(Widget editor) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => editor),
+    );
   }
 
   Widget _statusBar() {

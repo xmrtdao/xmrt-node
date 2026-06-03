@@ -26,6 +26,13 @@ import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import java.util.concurrent.TimeUnit
 
+/** Build a JSON request body for OkHttp from a Map. Uses Gson (bundled with Android). */
+private fun Map<String, Any?>.toJsonRequestBody(): okhttp3.RequestBody {
+    val gson = com.google.gson.Gson()
+    val json = gson.toJson(this)
+    return json.toRequestBody("application/json".toMediaType())
+}
+
 class MainActivity : FlutterActivity() {
     private val MINING_CHANNEL = "io.xmrt.node/mining"
     private val AGENT_CHANNEL = "io.xmrt.node/agent"
@@ -236,6 +243,74 @@ class MainActivity : FlutterActivity() {
                         httpClient.newCall(req).execute().use { resp ->
                             result.success(mapOf("deleted" to resp.isSuccessful))
                         }
+                    } catch (e: Exception) { result.error("UNREACHABLE", e.message, null) }
+                }
+            }
+            "agent.appendMemory" -> {
+                val entry = call.argument<String>("entry")
+                if (entry.isNullOrBlank()) {
+                    result.error("INVALID_ARGS", "entry is required", null)
+                    return
+                }
+                activityScope.launch {
+                    try {
+                        val req = Request.Builder()
+                            .url("${AgentBridge.baseUrl()}/v1/memory")
+                            .post(mapOf("action" to "append", "entry" to entry)
+                                .toJsonRequestBody())
+                            .build()
+                        httpClient.newCall(req).execute().use { resp ->
+                            if (!resp.isSuccessful) {
+                                result.error("AGENT_ERROR", "agent returned ${resp.code}", null)
+                                return@use
+                            }
+                            result.success(mapOf("appended" to true))
+                        }
+                    } catch (e: Exception) { result.error("UNREACHABLE", e.message, null) }
+                }
+            }
+            "agent.writeSoul" -> {
+                val content = call.argument<String>("content")
+                if (content == null) {
+                    result.error("INVALID_ARGS", "content is required", null)
+                    return
+                }
+                activityScope.launch {
+                    try {
+                        val req = Request.Builder()
+                            .url("${AgentBridge.baseUrl()}/v1/soul")
+                            .post(mapOf("content" to content).toJsonRequestBody())
+                            .build()
+                        httpClient.newCall(req).execute().use { resp ->
+                            if (!resp.isSuccessful) {
+                                result.error("AGENT_ERROR", "agent returned ${resp.code}", null)
+                                return@use
+                            }
+                            result.success(mapOf("wrote" to true))
+                        }
+                    } catch (e: Exception) { result.error("UNREACHABLE", e.message, null) }
+                }
+            }
+            "agent.listSkills" -> {
+                activityScope.launch {
+                    try {
+                        val resp = withContext(Dispatchers.IO) { httpGet("${AgentBridge.baseUrl()}/v1/skills") }
+                        result.success(resp)
+                    } catch (e: Exception) { result.error("UNREACHABLE", e.message, null) }
+                }
+            }
+            "agent.getSkill" -> {
+                val name = call.argument<String>("name")
+                if (name.isNullOrBlank()) {
+                    result.error("INVALID_ARGS", "name is required", null)
+                    return
+                }
+                activityScope.launch {
+                    try {
+                        val resp = withContext(Dispatchers.IO) {
+                            httpGet("${AgentBridge.baseUrl()}/v1/skills/${java.net.URLEncoder.encode(name, "UTF-8")}")
+                        }
+                        result.success(resp)
                     } catch (e: Exception) { result.error("UNREACHABLE", e.message, null) }
                 }
             }
