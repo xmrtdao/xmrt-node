@@ -32,7 +32,7 @@ class _SoulEditor extends _AgentFileEditor {
 }
 
 /// Stateful shell that handles the load/edit/save flow.
-class _AgentEditorState extends State<_AgentFileEditor> {
+abstract class _AgentEditorState extends State<_AgentFileEditor> {
   final _controller = TextEditingController();
   bool _loading = true;
   bool _saving = false;
@@ -277,10 +277,10 @@ class _SoulEditorState extends _AgentEditorState {
 
 /// Public editors exposed for the chat screen's overflow menu.
 class AgentMemoryEditor extends _MemoryEditor {
-  const AgentMemoryEditor({required super.agent}) : super(title: 'Memory');
+  const AgentMemoryEditor({required super.agent});
 }
 class AgentSoulEditor extends _SoulEditor {
-  const AgentSoulEditor({required super.agent}) : super(title: 'Soul');
+  const AgentSoulEditor({required super.agent});
 }
 class AgentSkillsBrowser extends _SkillsBrowser {
   const AgentSkillsBrowser({required super.agent});

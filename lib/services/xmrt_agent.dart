@@ -88,8 +88,8 @@ class XmrtAgent {
     final choices = res?['choices'] as List?;
     if (choices == null || choices.isEmpty) return '';
     final first = choices.first as Map;
-    final message = first['message'] as Map?;
-    return message?['content'] as String? ?? '';
+    final messageData = first['message'] as Map?;
+    return messageData?['content'] as String? ?? '';
   }
 
   Future<List<String>> listModels() async {

@@ -273,9 +273,9 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
             icon: const Icon(Icons.more_vert, color: Colors.white70),
             color: const Color(0xFF12121a),
             onSelected: (value) {
-              if (value == 'memory') _openEditor(const AgentMemoryEditor(agent: _agent));
-              if (value == 'soul') _openEditor(const AgentSoulEditor(agent: _agent));
-              if (value == 'skills') _openEditor(const AgentSkillsBrowser(agent: _agent));
+              if (value == 'memory') _openEditor(AgentMemoryEditor(agent: _agent));
+              if (value == 'soul') _openEditor(AgentSoulEditor(agent: _agent));
+              if (value == 'skills') _openEditor(AgentSkillsBrowser(agent: _agent));
             },
             itemBuilder: (_) => [
               PopupMenuItem(
