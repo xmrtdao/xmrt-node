@@ -289,7 +289,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
               PopupMenuItem(
                 value: 'soul',
                 child: Row(children: [
-                  const Icon(Icons.face_retouch_natural, color: Color(0xFFFF6600), size: 18),
+                  const Icon(Icons.auto_awesome, color: Color(0xFFFF6600), size: 18),
                   const SizedBox(width: 10),
                   Text(AppLocalizations.of(context)!.agentSoul, style: const TextStyle(color: Colors.white)),
                 ]),

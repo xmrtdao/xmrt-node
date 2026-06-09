@@ -1,0 +1,55 @@
+name: Deploy Web Preview (Fixed)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.x
+      
+      - name: Enable web support
+        run: flutter config --enable-web
+      
+      - name: Install deps
+        run: flutter pub get
+      
+      - name: Check web support
+        run: flutter doctor -v
+      
+      - name: Build web (skip unsupported plugins)
+        run: |
+          # Create web-safe version by commenting out problematic imports
+          sed -i 's/import.*flutter_tts.*/\/\/ &/' lib/screens/*.dart
+          sed -i 's/import.*file_picker.*/\/\/ &/' lib/screens/*.dart
+          flutter build web --release --base-href /xmrt-node/ --web-renderer html
+      
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+      
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -119,7 +119,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   _welcome(),
                   _workerName(),
-                  _provider(),
+                  _providerStep(),
                   _hardware(),
                 ],
               ),
@@ -291,7 +291,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   // ── Step 3 ───────────────────────────────────────────────────────────────
-  Widget _provider() {
+  Widget _providerStep() {
     return Padding(
       padding: const EdgeInsets.all(28),
       child: Column(

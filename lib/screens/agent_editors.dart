@@ -12,14 +12,23 @@ abstract class _AgentFileEditor extends StatefulWidget {
   final XmrtAgent agent;
   final String title;
   const _AgentFileEditor({required this.agent, required this.title});
+
+  @override
+  State<_AgentFileEditor> createState();
 }
 
 class _MemoryEditor extends _AgentFileEditor {
   const _MemoryEditor({required super.agent}) : super(title: 'Memory');
+
+  @override
+  State<_MemoryEditor> createState() => _MemoryEditorState();
 }
 
 class _SoulEditor extends _AgentFileEditor {
   const _SoulEditor({required super.agent}) : super(title: 'Soul');
+
+  @override
+  State<_SoulEditor> createState() => _SoulEditorState();
 }
 
 /// Stateful shell that handles the load/edit/save flow.
