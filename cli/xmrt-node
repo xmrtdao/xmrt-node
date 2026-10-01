@@ -51,6 +51,10 @@ XMRIG_LOG = CONFIG_DIR / "xmrig-xmrig.log"
 LOCK_FILE = CONFIG_DIR / "xmrig.lock"
 XMRIG_DIR = CONFIG_DIR / "xmrig"
 XMRIG_BIN = XMRIG_DIR / "xmrig"
+# The rig actually in production is built from ~/xmrig, not from the CLI's
+# own config dir, and the boot script launches it from there. Both paths must
+# be recognised when looking for a running miner.
+CANONICAL_XMRIG_BIN = HOME / "xmrig" / "build" / "xmrig"
 INSTALL_MARKER = CONFIG_DIR / ".installed"
 
 # ── Utilities ───────────────────────────────────────────────────────────────
@@ -123,8 +127,53 @@ def heartbeat(cfg, stats=None):
         payload["stats"] = stats
     return relay_post("/api/fleet/heartbeat", payload)
 
+def _running_xmrig_pids():
+    """Find live XMRig processes by scanning /proc, lowest PID first.
+
+    Reading PID_FILE alone is not enough: Termux:Boot starts the miner from
+    ~/.termux/boot/start-xmrig.sh, which never writes the CLI's PID file. The
+    CLI then reports STOPPED against a healthy miner, and `stop` refuses to
+    act on a process it cannot see. Match on the binary path instead of a
+    single pid file so any launcher is visible.
+
+    Returns a list of pids whose argv names a known XMRig binary. Match the
+    binary path across the whole argv vector rather than only argv[0]: the
+    boot script `exec`s into xmrig, so a real miner always has the binary as
+    argv[0], while a miner launched via a wrapper may carry it later. Require
+    a full path match so an unrelated command line that merely mentions
+    "xmrig" (a grep over logs, an editor) cannot be mistaken for a miner.
+    """
+    candidates = [str(XMRIG_BIN), str(CANONICAL_XMRIG_BIN)]
+    me = os.getpid()
+    pids = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        if pid == me:
+            continue
+        try:
+            raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            continue
+        argv = [a for a in raw.decode("utf-8", "replace").split("\0") if a]
+        if not argv:
+            continue
+        # A shell wrapper puts the binary in a later arg; a direct exec puts
+        # it first. Accept either, but require a real path match so a stray
+        # "xmrig" in an unrelated command line cannot match.
+        if any(cand in arg for arg in argv for cand in candidates):
+            pids.append(pid)
+    return sorted(pids)
+
+
 def get_xmrig_pid():
-    """Read PID file and check if XMRig is running."""
+    """Resolve the running XMRig pid, preferring the PID file, then /proc.
+
+    Returns None when nothing is running. A stale PID file is cleaned up
+    rather than trusted, and a live miner found via /proc is adopted into
+    the PID file so later single-pid callers stay correct.
+    """
     if PID_FILE.exists():
         try:
             pid = int(PID_FILE.read_text().strip())
@@ -132,6 +181,12 @@ def get_xmrig_pid():
             return pid
         except (ProcessLookupError, ValueError, OSError):
             PID_FILE.unlink(missing_ok=True)
+
+    live = _running_xmrig_pids()
+    if live:
+        PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PID_FILE.write_text(str(live[0]))
+        return live[0]
     return None
 
 def get_xmrig_stats():
