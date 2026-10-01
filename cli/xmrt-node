@@ -54,6 +54,9 @@ API_PORT = 4321
 
 HOME = Path.home()
 CONFIG_DIR = HOME / ".config" / NAME
+DEVICE_ID_FILE = CONFIG_DIR / "device.id"
+COUNTERS_FILE = CONFIG_DIR / "share_counters.json"
+SESSION_FILE = CONFIG_DIR / "miner_session.json"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 PID_FILE = CONFIG_DIR / "xmrig.pid"
 LOG_FILE = CONFIG_DIR / "xmrig.log"
@@ -156,6 +159,190 @@ def relay_post(path, data):
         return {"error": str(e)}
 
 
+def _android_props():
+    """Read stable Android build properties via getprop.
+
+    /system/build.prop is not readable as an unprivileged Termux app, and
+    /proc/cpuinfo on this device exposes only generic "processor: 0..N"
+    lines — no model. getprop is the one source that yields a real
+    distinguishing value (ro.product.model). Serial numbers are
+    deliberately not used: they are PII and some devices return empty.
+    """
+    wanted = ("ro.product.model", "ro.product.device", "ro.build.display.id")
+    values = []
+    for prop in wanted:
+        try:
+            out = subprocess.run(
+                ["getprop", prop],
+                capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        if out:
+            values.append(out)
+    return values
+
+
+def device_id():
+    """Stable, machine-derived identity for this rig.
+
+    The pool worker name ("joe") is an arbitrary alias: anyone can set it,
+    it collides across devices, and it proves nothing about which hardware
+    earned a share. Rewards attribution needs an identity tied to the
+    device instead.
+
+    Derived from the hardware model, Android build, and architecture, then
+    sha256-truncated. Nothing here is PII (no serial, no wallet, no
+    account) and none of it changes across reboots.
+
+    Uniqueness caveat, verified rather than assumed: model + build + ABI is
+    a *fleet-class* identity, not a per-unit one. Two phones of the same
+    model on the same build produce the same id, because Android exposes no
+    unprivileged unique hardware identifier. It is stable and materially
+    better than a self-chosen worker alias, but for true per-unit rewards
+    attribution the id needs binding to an authenticated account at
+    registration time. Persisted on first use so the value never drifts.
+    """
+    if DEVICE_ID_FILE.exists():
+        try:
+            existing = DEVICE_ID_FILE.read_text().strip()
+            if existing:
+                return existing
+        except OSError:
+            pass
+
+    parts = []
+    parts.extend(_android_props())
+    parts.append(f"abi:{os.uname().machine}")
+
+    # Core count is a weak signal on its own (identical across same-model
+    # devices) but it does distinguish genuinely different hardware, and it
+    # costs nothing.
+    try:
+        parts.append(f"cores:{os.cpu_count()}")
+    except Exception:
+        pass
+
+    if not parts:
+        parts.append(str(HOME))
+
+    digest = hashlib.sha256("|".join(parts).encode()).hexdigest()
+    device = f"dev-{digest[:16]}"
+    try:
+        ensure_config_dir()
+        DEVICE_ID_FILE.write_text(device)
+        os.chmod(DEVICE_ID_FILE, 0o600)
+    except OSError:
+        pass
+    return device
+
+
+def _miner_session_id(stats, pid):
+    """Identify this miner process, so a counter reset is detectable.
+
+    XMRig resets shares_good to 0 when the process restarts. Without a way to
+    tell "counter reset" from "counter went down", a restart looks like the
+    rig losing thousands of shares, and a delta computed across the boundary
+    is garbage. Key the session on pid plus start time: a new pid, or the
+    same pid with a newer start time, is a different session.
+    """
+    start = None
+    if pid:
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+            # Field 22 is starttime; comm can contain spaces, so split after
+            # the final ')'.
+            tail = stat[stat.rfind(")") + 1:].split()
+            start = int(tail[19])
+        except (OSError, ValueError, IndexError):
+            start = None
+    return f"{pid or 'unknown'}-{start or 'unknown'}"
+
+
+def detect_share_delta(stats, pid=None):
+    """Compute newly-accepted shares since the previous observation.
+
+    Returns a dict describing the change, ready to be embedded in a
+    heartbeat:
+
+        {shares_accepted, shares_rejected, session_id, session_reset,
+         cumulative_accepted, cumulative_rejected, observed_at}
+
+    Why deltas rather than raw totals: the relay stores one mutable record
+    per agent, so a cumulative counter is overwritten every beat and its
+    history is unrecoverable. Rewards attribution needs the increments.
+
+    Counter resets are the failure mode to get right. A restart drops
+    shares_good to 0; naive subtraction yields a large negative delta that
+    looks like data loss. On a reset we report the new process's count as
+    the delta (everything it has earned so far) and flag session_reset, so
+    the consumer knows not to treat it as a discontinuity.
+
+    Returns None when there is nothing to report, so a steady rig does not
+    emit an event on every beat.
+    """
+    if not stats:
+        return None
+
+    results = stats.get("results", {}) or {}
+    conn = stats.get("connection", {}) or {}
+    accepted = int(results.get("shares_good") or 0)
+    rejected = int(results.get("shares_rejected") or 0)
+    session_id = _miner_session_id(stats, pid)
+
+    try:
+        prior = json.loads(COUNTERS_FILE.read_text())
+        if not isinstance(prior, dict):
+            prior = {}
+    except (OSError, ValueError):
+        prior = {}
+
+    session_reset = False
+    d_accept = accepted
+    d_reject = rejected
+
+    if prior.get("session_id") == session_id:
+        # Same process: the increment is the difference.
+        prev_acc = int(prior.get("accepted") or 0)
+        prev_rej = int(prior.get("rejected") or 0)
+        d_accept = accepted - prev_acc
+        d_reject = rejected - prev_rej
+        if d_accept < 0 or d_reject < 0:
+            # Counts went backwards within one session: XMRig reconciled or
+            # the API was re-read mid-reset. Treat as a reset rather than
+            # reporting a negative delta.
+            session_reset = True
+            d_accept = accepted
+            d_reject = rejected
+    else:
+        # New process. Everything it has earned is new to us.
+        session_reset = True
+
+    try:
+        ensure_config_dir()
+        COUNTERS_FILE.write_text(json.dumps({
+            "accepted": accepted,
+            "rejected": rejected,
+            "session_id": session_id,
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+        }))
+    except OSError:
+        pass
+
+    if d_accept == 0 and d_reject == 0 and not session_reset:
+        return None
+
+    return {
+        "shares_accepted": d_accept,
+        "shares_rejected": d_reject,
+        "session_id": session_id,
+        "session_reset": session_reset,
+        "cumulative_accepted": accepted,
+        "cumulative_rejected": rejected,
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def _stats_digest(stats):
     """Reduce an XMRig /1/summary payload to the fields the relay tracks.
 
@@ -194,9 +381,17 @@ def heartbeat(cfg, stats=None):
     `status`; it reads hashrate from a top-level field, not from a nested
     stats blob. Wallet stays out of the payload — the fleet only needs the
     worker name and pool to track the rig.
+
+    device_id is carried so rewards can be attributed to hardware rather
+    than to the pool worker name, which is an arbitrary alias anyone can
+    set. share_delta carries only the increment since the previous beat, so
+    a consumer can persist an event series instead of a counter that is
+    overwritten in place.
     """
     hr, digest = _stats_digest(stats)
-    running = get_xmrig_pid() is not None
+    pid = get_xmrig_pid()
+    running = pid is not None
+    delta = detect_share_delta(stats, pid)
     payload = {
         "agent_id": AGENT_ID,
         "name": "XMRT Node (Termux)",
@@ -204,14 +399,19 @@ def heartbeat(cfg, stats=None):
         "status": "ONLINE" if (running and stats) else "OFFLINE",
         "hashrate": round(hr, 2),
         "device_type": "android-termux",
+        "device_id": device_id(),
         "version": VERSION,
         "metadata": {
             **digest,
             "worker": digest.get("worker") or cfg.get("worker"),
             "pool": digest.get("pool") or cfg.get("pool"),
-            "pid": get_xmrig_pid(),
+            "pid": pid,
+            "device_id": device_id(),
         },
     }
+    if delta:
+        payload["share_delta"] = delta
+        payload["metadata"]["share_delta"] = delta
     return relay_post("/api/fleet/heartbeat", payload)
 
 def _running_xmrig_pids():
