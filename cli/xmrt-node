@@ -567,6 +567,84 @@ def cmd_status():
     print()
 
 
+def cmd_heartbeat():
+    """Send one heartbeat to the relay and print the relay's verdict.
+
+    Split out from `status` so a scheduler can call it without the full
+    status banner, and so the exit code reflects delivery: 0 on success,
+    1 when the relay rejected the payload or is unreachable.
+    """
+    cfg = load_config()
+    stats = get_xmrig_stats()
+    resp = heartbeat(cfg, stats)
+
+    if resp.get("success"):
+        hr, _ = _stats_digest(stats)
+        ok(f"Heartbeat accepted: {AGENT_ID} ONLINE at {hr:.0f} H/s")
+        return 0
+
+    err(f"Heartbeat failed: {resp.get('error', resp)}")
+    return 1
+
+
+def cmd_watch():
+    """Run the heartbeat loop in the foreground until stopped.
+
+    Backs the periodic tracking gap: the relay record goes stale whenever
+    nobody runs start/stop/status, because nothing scheduled a heartbeat.
+    Interval comes from --every (default 60s). Sleeps in short slices and
+    re-checks the miner each tick so a crash still reports OFFLINE rather
+    than freezing the record at the last good hashrate.
+    """
+    interval = 60
+    if "--every" in sys.argv:
+        try:
+            interval = int(sys.argv[sys.argv.index("--every") + 1])
+        except (IndexError, ValueError):
+            err("--every needs a number of seconds")
+            return 1
+        if interval < 10:
+            err("--every must be >= 10s (below that the relay throttles)")
+            return 1
+
+    info(f"Heartbeat loop every {interval}s — Ctrl+C to stop")
+    consecutive_failures = 0
+    try:
+        while True:
+            cfg = load_config()
+            stats = get_xmrig_stats()
+            resp = heartbeat(cfg, stats)
+            if resp.get("success"):
+                hr, _ = _stats_digest(stats)
+                if consecutive_failures:
+                    # Surface recovery: a relay restart looks identical to a
+                    # dead rig otherwise, and silence hides both.
+                    ok(f"relay recovered after {consecutive_failures} failed "
+                       f"tick(s)")
+                consecutive_failures = 0
+                print(f"  {datetime.utcnow().strftime('%H:%M:%S')}  "
+                      f"ONLINE  {hr:.0f} H/s")
+            else:
+                consecutive_failures += 1
+                warn(f"  {datetime.utcnow().strftime('%H:%M:%S')}  "
+                     f"FAILED ({consecutive_failures}): "
+                     f"{resp.get('error', resp)}")
+                # Keep looping through relay failures. A restart or a blip
+                # must not kill the tracker, or the record stays stale for
+                # good — which is the exact gap this command closes.
+                if consecutive_failures == 5:
+                    warn("relay unreachable for 5 ticks; continuing to retry")
+            # Sleep in slices so a SIGINT lands promptly instead of waiting
+            # out a full interval.
+            deadline = time.time() + interval
+            while time.time() < deadline:
+                time.sleep(min(5, deadline - time.time()))
+    except KeyboardInterrupt:
+        print()
+        ok("Heartbeat loop stopped")
+    return 0
+
+
 def cmd_logs():
     """View recent mining logs."""
     if not LOG_FILE.exists():
@@ -869,6 +947,8 @@ def main():
         "start": cmd_start,
         "stop": cmd_stop,
         "status": cmd_status,
+        "heartbeat": cmd_heartbeat,
+        "watch": cmd_watch,
         "logs": cmd_logs,
         "peers": cmd_peers,
     }
@@ -898,7 +978,10 @@ def main():
         else:
             err(f"Unknown agent subcommand: {sub}")
     elif command in commands:
-        commands[command]()
+        # Propagate the command's return value as the process exit code so a
+        # scheduler can react to failure; previously every command exited 0
+        # regardless of what happened.
+        sys.exit(commands[command]() or 0)
     else:
         err(f"Unknown command: {command}")
         print("Run 'xmrt-node' without arguments for help.")
