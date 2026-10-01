@@ -22,6 +22,7 @@ import signal
 import subprocess
 import hashlib
 import random
+import fcntl
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -36,11 +37,18 @@ POOL_URL = "pool.mobilemonero.com:3333"
 POOL_WALLET = "46UxNFuGM2E3UwmZWWJicaRPoRwqwW4byQkaTHkX8yPcVihp91qAVtSFipWUGJJUyTXgzSqxzDQtNLf2bsp2DX2qCCgC5mg"
 XMRIG_VERSION = "6.21.1"
 
+# Must match the API port of the XMRig config actually in use. The stock
+# repo generated 19090 while the deployed rig listens on 4321, so every
+# stats call in this CLI silently returned None against a healthy miner.
+API_PORT = 4321
+
 HOME = Path.home()
 CONFIG_DIR = HOME / ".config" / NAME
 CONFIG_FILE = CONFIG_DIR / "config.json"
 PID_FILE = CONFIG_DIR / "xmrig.pid"
 LOG_FILE = CONFIG_DIR / "xmrig.log"
+XMRIG_LOG = CONFIG_DIR / "xmrig-xmrig.log"
+LOCK_FILE = CONFIG_DIR / "xmrig.lock"
 XMRIG_DIR = CONFIG_DIR / "xmrig"
 XMRIG_BIN = XMRIG_DIR / "xmrig"
 INSTALL_MARKER = CONFIG_DIR / ".installed"
@@ -127,10 +135,10 @@ def get_xmrig_pid():
     return None
 
 def get_xmrig_stats():
-    """Get mining stats from XMRig API (port 19090)."""
+    """Get mining stats from the XMRig API."""
     try:
-        req = urllib.request.Request("http://127.0.0.1:19090/1/summary", timeout=5)
-        with urllib.request.urlopen(req) as r:
+        req = urllib.request.Request(f"http://127.0.0.1:{API_PORT}/1/summary")
+        with urllib.request.urlopen(req, timeout=5) as r:
             return json.loads(r.read())
     except Exception:
         return None
@@ -252,6 +260,11 @@ def generate_xmrig_config(cfg):
             "enabled": True,
             "max-threads-hint": cfg.get("max_cpu", 75),
         },
+        # Both keys are written, but XMRig ignores them below
+        # kMinimumDonateLevel (=1) unless the binary is patched. Verify on the
+        # startup banner that it reads DONATE 0%.
+        "donate-level": 0,
+        "donate-over-proxy": 0,
         "pools": [{
             "url": cfg["pool"],
             "user": cfg["wallet"],
@@ -262,16 +275,17 @@ def generate_xmrig_config(cfg):
         "api": {
             "enabled": True,
             "host": "127.0.0.1",
-            "port": 19090,
+            "port": API_PORT,
             "access-token": None,
             "restricted": True,
         },
         "http": {
             "enabled": True,
             "host": "127.0.0.1",
-            "port": 19090,
+            "port": API_PORT,
         },
     }
+    XMRIG_DIR.mkdir(parents=True, exist_ok=True)
     xmrig_config = XMRIG_DIR / "config.json"
     xmrig_config.write_text(json.dumps(config, indent=2))
     ok("XMRig config generated")
@@ -283,41 +297,64 @@ def cmd_start():
         warn("Not installed yet. Run 'xmrt-node install' first.")
         return
 
-    pid = get_xmrig_pid()
-    if pid:
-        warn(f"XMRig is already running (PID {pid})")
+    # Hold an exclusive lock across the whole check-then-start sequence.
+    # Without it, two concurrent starts (or a boot script racing a manual
+    # start) can both pass the pid check and launch a second miner. A second
+    # RandomX dataset on a phone will OOM-crash the device, and the loser of
+    # the API port bind only logs "HTTP API server failed to start" - which
+    # reads as a broken API rather than a duplicate miner.
+    ensure_config_dir()
+    lock_fp = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        warn("Another 'xmrt-node start' is in progress - skipping.")
+        lock_fp.close()
         return
 
-    cfg = load_config()
-    xmrig_config = XMRIG_DIR / "config.json"
-    if not xmrig_config.exists():
-        generate_xmrig_config(cfg)
+    try:
+        pid = get_xmrig_pid()
+        if pid:
+            warn(f"XMRig is already running (PID {pid})")
+            return
 
-    info("Starting XMRig mining daemon...")
-    
-    # Start XMRig in background with nohup
-    log_fp = open(LOG_FILE, "a")
-    proc = subprocess.Popen(
-        [str(XMRIG_BIN), "--config", str(xmrig_config)],
-        stdout=log_fp, stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+        cfg = load_config()
+        xmrig_config = XMRIG_DIR / "config.json"
+        if not xmrig_config.exists():
+            generate_xmrig_config(cfg)
 
-    PID_FILE.write_text(str(proc.pid))
-    ok(f"XMRig started (PID {proc.pid})")
-    info(f"Logs: {LOG_FILE}")
+        info("Starting XMRig mining daemon...")
 
-    # Send startup heartbeat to relay
-    relay_post("/api/fleet/heartbeat", {
-        "agent": "xmrt-node",
-        "worker": cfg["worker"],
-        "wallet": cfg["wallet"],
-        "status": "started",
-        "pid": proc.pid,
-        "timestamp": datetime.utcnow().isoformat(),
-        "platform": "android-termux",
-    })
+        # XMRig block-buffers stdout when it is not a TTY, so redirecting
+        # stdout leaves the log empty for the life of the process. Pass
+        # --log-file and let XMRig write its own log line by line.
+        log_fp = open(LOG_FILE, "a")
+        proc = subprocess.Popen(
+            [str(XMRIG_BIN), "--config", str(xmrig_config), "--no-color",
+             "--log-file", str(XMRIG_LOG)],
+            stdout=log_fp, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+        PID_FILE.write_text(str(proc.pid))
+        ok(f"XMRig started (PID {proc.pid})")
+        info(f"Miner log: {XMRIG_LOG}")
+        info("Verify on the startup banner: DONATE must read 0%")
+
+        # Send startup heartbeat to relay
+        relay_post("/api/fleet/heartbeat", {
+            "agent": "xmrt-node",
+            "worker": cfg["worker"],
+            "wallet": cfg["wallet"],
+            "status": "started",
+            "pid": proc.pid,
+            "timestamp": datetime.utcnow().isoformat(),
+            "platform": "android-termux",
+        })
+    finally:
+        fcntl.flock(lock_fp, fcntl.LOCK_UN)
+        lock_fp.close()
 
 
 def cmd_stop():
