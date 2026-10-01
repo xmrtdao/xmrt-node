@@ -33,6 +33,14 @@ VERSION = "1.0.0"
 NAME = "xmrt-node"
 
 RELAY_URL = "https://relay.mobilemonero.com"
+# Read from the environment at call time. Never hardcode the fleet key: it is
+# a credential, and a config-less checkout must still be able to reach an
+# unauthenticated relay. Export XMRT_API_KEY to enable authenticated calls.
+RELAY_API_KEY = os.environ.get("XMRT_API_KEY", "")
+# Stable identity for the fleet registry. The relay keys its agent records on
+# this value, so it must not change between heartbeats or the rig registers
+# as a new agent each time.
+AGENT_ID = "xmrt-node"
 POOL_URL = "pool.mobilemonero.com:3333"
 POOL_WALLET = "46UxNFuGM2E3UwmZWWJicaRPoRwqwW4byQkaTHkX8yPcVihp91qAVtSFipWUGJJUyTXgzSqxzDQtNLf2bsp2DX2qCCgC5mg"
 XMRIG_VERSION = "6.21.1"
@@ -105,26 +113,79 @@ def relay_post(path, data):
         req = urllib.request.Request(
             f"{RELAY_URL}{path}",
             data=body,
-            headers={"Content-Type": "application/json", "User-Agent": NAME}
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": NAME,
+                # The relay gates its fleet endpoints on x-api-key. Without this
+                # header the request is anonymous, so heartbeats are attributed
+                # to no agent and never reach the fleet registry.
+                "x-api-key": RELAY_API_KEY,
+            }
         )
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return {"error": f"HTTP {e.code}: {e.read().decode()[:200]}"}
     except Exception as e:
         return {"error": str(e)}
 
-def heartbeat(cfg, stats=None):
-    """Send fleet heartbeat to the relay."""
-    payload = {
-        "agent": "xmrt-node",
-        "worker": cfg["worker"],
-        "wallet": cfg["wallet"],
-        "pool": cfg["pool"],
-        "timestamp": datetime.utcnow().isoformat(),
-        "platform": "android-termux",
-        "version": VERSION,
+
+def _stats_digest(stats):
+    """Reduce an XMRig /1/summary payload to the fields the relay tracks.
+
+    Keep hashrate at the top level of the heartbeat: the relay stores it as a
+    scalar field on the agent record and renders it on the dashboard. Nested
+    it under "stats" and the fleet shows 0 H/s even though the miner is
+    hashing.
+    """
+    if not stats:
+        return 0, {}
+    hashrate = stats.get("hashrate", {}) or {}
+    total = hashrate.get("total") or [0, 0, 0]
+    # total = [10s, 60s, 15m]; prefer the 60s figure over the 10s one, which
+    # swings wildly right after a restart and reads as a false spike.
+    hr = total[1] if len(total) > 1 and total[1] else (total[0] or 0)
+    conn = stats.get("connection", {}) or {}
+    digest = {
+        "worker": stats.get("worker_id"),
+        "pool": conn.get("pool"),
+        "algo": stats.get("algo"),
+        "ping_ms": conn.get("ping"),
+        "accepted": conn.get("accepted"),
+        "rejected": conn.get("rejected"),
+        "failures": conn.get("failures"),
+        "shares_good": (stats.get("results", {}) or {}).get("shares_good"),
+        "uptime": stats.get("uptime"),
+        "donate_level": stats.get("donate_level"),
     }
-    if stats:
-        payload["stats"] = stats
+    return hr, {k: v for k, v in digest.items() if v is not None}
+
+
+def heartbeat(cfg, stats=None):
+    """Send fleet heartbeat to the relay.
+
+    The relay rejects this with 400 unless the body carries `agent_id` and
+    `status`; it reads hashrate from a top-level field, not from a nested
+    stats blob. Wallet stays out of the payload — the fleet only needs the
+    worker name and pool to track the rig.
+    """
+    hr, digest = _stats_digest(stats)
+    running = get_xmrig_pid() is not None
+    payload = {
+        "agent_id": AGENT_ID,
+        "name": "XMRT Node (Termux)",
+        "role": "miner",
+        "status": "ONLINE" if (running and stats) else "OFFLINE",
+        "hashrate": round(hr, 2),
+        "device_type": "android-termux",
+        "version": VERSION,
+        "metadata": {
+            **digest,
+            "worker": digest.get("worker") or cfg.get("worker"),
+            "pool": digest.get("pool") or cfg.get("pool"),
+            "pid": get_xmrig_pid(),
+        },
+    }
     return relay_post("/api/fleet/heartbeat", payload)
 
 def _running_xmrig_pids():
@@ -399,13 +460,14 @@ def cmd_start():
 
         # Send startup heartbeat to relay
         relay_post("/api/fleet/heartbeat", {
-            "agent": "xmrt-node",
-            "worker": cfg["worker"],
-            "wallet": cfg["wallet"],
-            "status": "started",
-            "pid": proc.pid,
-            "timestamp": datetime.utcnow().isoformat(),
-            "platform": "android-termux",
+            "agent_id": AGENT_ID,
+            "name": "XMRT Node (Termux)",
+            "role": "miner",
+            "status": "ONLINE",
+            "hashrate": 0,
+            "device_type": "android-termux",
+            "version": VERSION,
+            "metadata": {"pid": proc.pid, "event": "started"},
         })
     finally:
         fcntl.flock(lock_fp, fcntl.LOCK_UN)
@@ -433,12 +495,14 @@ def cmd_stop():
     # Send stop heartbeat
     cfg = load_config()
     relay_post("/api/fleet/heartbeat", {
-        "agent": "xmrt-node",
-        "worker": cfg["worker"],
-        "wallet": cfg["wallet"],
-        "status": "stopped",
-        "timestamp": datetime.utcnow().isoformat(),
-        "platform": "android-termux",
+        "agent_id": AGENT_ID,
+        "name": "XMRT Node (Termux)",
+        "role": "miner",
+        "status": "OFFLINE",
+        "hashrate": 0,
+        "device_type": "android-termux",
+        "version": VERSION,
+        "metadata": {"event": "stopped", "worker": cfg.get("worker")},
     })
 
 
