@@ -26,7 +26,7 @@ import fcntl
 import urllib.request
 import urllib.error
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ── Constants ───────────────────────────────────────────────────────────────
 VERSION = "1.0.0"
@@ -593,6 +593,16 @@ def cmd_status():
     print()
 
 
+def _hhmmss():
+    """Current UTC time as HH:MM:SS.
+
+    datetime.utcnow() is deprecated and warns on every call, which put a
+    DeprecationWarning in the heartbeat log once per tick and buried real
+    failures. timezone.utc is the supported equivalent.
+    """
+    return datetime.now(timezone.utc).strftime("%H:%M:%S")
+
+
 def cmd_heartbeat():
     """Send one heartbeat to the relay and print the relay's verdict.
 
@@ -648,11 +658,11 @@ def cmd_watch():
                     ok(f"relay recovered after {consecutive_failures} failed "
                        f"tick(s)")
                 consecutive_failures = 0
-                print(f"  {datetime.utcnow().strftime('%H:%M:%S')}  "
+                print(f"  {_hhmmss()}  "
                       f"ONLINE  {hr:.0f} H/s")
             else:
                 consecutive_failures += 1
-                warn(f"  {datetime.utcnow().strftime('%H:%M:%S')}  "
+                warn(f"  {_hhmmss()}  "
                      f"FAILED ({consecutive_failures}): "
                      f"{resp.get('error', resp)}")
                 # Keep looping through relay failures. A restart or a blip
